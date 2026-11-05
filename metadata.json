@@ -1,0 +1,6 @@
+{
+  "name": "Worm Temp Copier",
+  "description": "Dark Gaming Utility for managing, copying, and moving files with Shizuku integration, SHA-256 verification, and custom path presets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
