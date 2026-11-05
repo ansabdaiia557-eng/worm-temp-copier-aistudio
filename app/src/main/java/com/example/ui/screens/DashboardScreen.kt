@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.AlertDialog
@@ -48,6 +49,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -55,6 +58,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -76,6 +81,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.AppSettings
+import com.example.data.GameEditionInfo
+import com.example.data.PRESET_GAME_EDITIONS
 import com.example.data.OperationStatus
 import com.example.data.OperationType
 import com.example.data. PathAccessStatus
@@ -119,6 +126,9 @@ fun DashboardScreen(
     onPickDestinationFolder: () -> Unit,
     onSetManualDestination: (String) -> Unit,
     onResetDefaultPath: () -> Unit,
+    onSelectGameEdition: (GameEditionInfo) -> Unit,
+    onToggleAutoDelete: (Boolean) -> Unit,
+    onSetRetentionMinutes: (Int) -> Unit,
     onStartCopy: () -> Unit,
     onStartMove: () -> Unit,
     onCancelTransfer: () -> Unit,
@@ -159,7 +169,15 @@ fun DashboardScreen(
             )
         }
 
-        // 3. Main Operations / Selected Files Card
+        // 3. Quick Game Paths Edition Selector Card
+        item {
+            DashboardGameEditionsSelector(
+                selectedEditionKey = settings.selectedGameEdition,
+                onSelectEdition = onSelectGameEdition
+            )
+        }
+
+        // 4. Main Operations / Selected Files Card
         item {
             MainOperationsCard(
                 activeSelectedFiles = activeSelectedFiles,
@@ -171,7 +189,7 @@ fun DashboardScreen(
             )
         }
 
-        // 4. Destination Folder Card
+        // 5. Destination Folder Card
         item {
             DestinationCard(
                 currentPath = settings.activeDestinationPath,
@@ -184,7 +202,17 @@ fun DashboardScreen(
             )
         }
 
-        // 5. Execution Area (COPY / MOVE / Progress Bar / Per-file Results)
+        // 6. Auto Delete Quick Retention Configuration
+        item {
+            DashboardAutoDeleteConfig(
+                autoDeleteEnabled = settings.autoDeleteEnabled,
+                retentionMinutes = settings.defaultRetentionMinutes,
+                onToggleAutoDelete = onToggleAutoDelete,
+                onSelectRetention = onSetRetentionMinutes
+            )
+        }
+
+        // 7. Execution Area (COPY / MOVE / Progress Bar / Per-file Results)
         item {
             ExecutionAreaCard(
                 transferState = transferState,
@@ -1259,3 +1287,162 @@ private fun ExecutionAreaCard(
         }
     }
 }
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DashboardGameEditionsSelector(
+    selectedEditionKey: String,
+    onSelectEdition: (GameEditionInfo) -> Unit
+) {
+    val strings = LocalAppStrings.current
+    GamingCard(glowBorderColor = NeonGreen.copy(alpha = 0.35f)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.SportsEsports,
+                contentDescription = null,
+                tint = NeonGreen,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = strings.gamePathsSectionTitle,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = strings.gamePathsSectionSubtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            PRESET_GAME_EDITIONS.forEach { edition ->
+                val isSelected = selectedEditionKey == edition.key.name
+                FilterChip(
+                    selected = isSelected,
+                    onClick = { onSelectEdition(edition) },
+                    label = {
+                        Text(
+                            text = edition.title.removePrefix("PUBG MOBILE "),
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = NeonGreenSurface,
+                        selectedLabelColor = NeonGreen
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = isSelected,
+                        selectedBorderColor = NeonGreen
+                    )
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DashboardAutoDeleteConfig(
+    autoDeleteEnabled: Boolean,
+    retentionMinutes: Int,
+    onToggleAutoDelete: (Boolean) -> Unit,
+    onSelectRetention: (Int) -> Unit
+) {
+    val strings = LocalAppStrings.current
+    GamingCard(glowBorderColor = if (autoDeleteEnabled) NeonGreen.copy(alpha = 0.4f) else CarbonBorder) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = strings.autoDeleteSectionTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = strings.autoDeleteToggleDesc,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = autoDeleteEnabled,
+                onCheckedChange = onToggleAutoDelete,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = ObsidianDark,
+                    checkedTrackColor = NeonGreen
+                )
+            )
+        }
+
+        if (autoDeleteEnabled) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = strings.retentionDurationLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = strings.minuteUnit(retentionMinutes),
+                    fontFamily = JetBrainsMonoFontFamily,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = NeonGreen
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                (1..10).forEach { mins ->
+                    val isSelected = retentionMinutes == mins
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { onSelectRetention(mins) },
+                        label = {
+                            Text(
+                                text = "${mins}m",
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = NeonGreenSurface,
+                            selectedLabelColor = NeonGreen
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = isSelected,
+                            selectedBorderColor = NeonGreen
+                        )
+                    )
+                }
+            }
+        }
+    }
+}
+

@@ -30,11 +30,13 @@ import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.FolderCopy
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.HourglassBottom
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.FolderCopy
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.HourglassBottom
 import androidx.compose.material.icons.outlined.Route
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
@@ -92,6 +94,7 @@ enum class AppDestination(
     HOME("home", Icons.Filled.Home, Icons.Outlined.Home),
     FILES("files", Icons.Filled.FolderCopy, Icons.Outlined.FolderCopy),
     PATHS("paths", Icons.Filled.Route, Icons.Outlined.Route),
+    AUTO_DELETE("autodelete", Icons.Filled.HourglassBottom, Icons.Outlined.HourglassBottom),
     HISTORY("history", Icons.Filled.History, Icons.Outlined.History),
     SETTINGS("settings", Icons.Filled.Settings, Icons.Outlined.Settings)
 }
@@ -129,6 +132,20 @@ fun WormCopierApp(
 
     var showSplash by rememberSaveable { mutableStateOf(!skipSplashForTests) }
     var currentTab by rememberSaveable { mutableStateOf(AppDestination.HOME) }
+
+    val scheduledDeletions by viewModel.scheduledDeletions.collectAsStateWithLifecycle()
+    val gameEditionStatuses by viewModel.gameEditionStatuses.collectAsStateWithLifecycle()
+
+    // Notification permission launcher for Android 13+
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { /* Permission granted or dismissed */ }
+
+    LaunchedEffect(Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     LaunchedEffect(Unit) {
         if (showSplash) {
@@ -197,6 +214,7 @@ fun WormCopierApp(
                                     AppDestination.HOME -> appStrings.navHome
                                     AppDestination.FILES -> appStrings.navFiles
                                     AppDestination.PATHS -> appStrings.navPaths
+                                    AppDestination.AUTO_DELETE -> appStrings.navAutoDelete
                                     AppDestination.HISTORY -> appStrings.navHistory
                                     AppDestination.SETTINGS -> appStrings.navSettings
                                 }
@@ -213,8 +231,9 @@ fun WormCopierApp(
                                     label = {
                                         Text(
                                             text = labelText,
-                                            fontSize = 11.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                            fontSize = 10.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                            maxLines = 1
                                         )
                                     },
                                     colors = NavigationBarItemDefaults.colors(
@@ -257,6 +276,9 @@ fun WormCopierApp(
                                         viewModel.setActiveDestinationPath(path)
                                     },
                                     onResetDefaultPath = viewModel::resetToDefaultDestinationPath,
+                                    onSelectGameEdition = viewModel::selectGameEdition,
+                                    onToggleAutoDelete = viewModel::setAutoDeleteEnabled,
+                                    onSetRetentionMinutes = viewModel::setDefaultRetentionMinutes,
                                     onStartCopy = { viewModel.requestStartTransfer(OperationType.COPY) },
                                     onStartMove = { viewModel.requestStartTransfer(OperationType.MOVE) },
                                     onCancelTransfer = viewModel::cancelActiveTransfer,
@@ -282,8 +304,11 @@ fun WormCopierApp(
                                 AppDestination.PATHS -> PathsScreen(
                                     savedPaths = savedPaths,
                                     activeDestinationPath = settings.activeDestinationPath,
+                                    gameEditionStatuses = gameEditionStatuses,
                                     shizukuReady = shizukuStatus.isReadyForElevatedOps,
                                     checkPathAccess = viewModel::getPathAccessStatus,
+                                    onSelectGameEdition = viewModel::selectGameEdition,
+                                    onChangeGameEditionPath = viewModel::updateGameEditionPath,
                                     onSelectActivePath = { saved ->
                                         viewModel.setActiveDestinationPath(
                                             path = saved.path,
@@ -295,6 +320,16 @@ fun WormCopierApp(
                                     onEditSavedPath = viewModel::updateSavedPath,
                                     onToggleFavorite = viewModel::toggleFavoritePath,
                                     onDeletePath = viewModel::deleteSavedPath
+                                )
+
+                                AppDestination.AUTO_DELETE -> com.example.ui.screens.AutoDeleteScreen(
+                                    settings = settings,
+                                    scheduledList = scheduledDeletions,
+                                    onToggleAutoDelete = viewModel::setAutoDeleteEnabled,
+                                    onSetDefaultRetention = viewModel::setDefaultRetentionMinutes,
+                                    onCancelSchedule = viewModel::cancelScheduledDeletion,
+                                    onDeleteNow = viewModel::deleteScheduledCopyNow,
+                                    onClearFinished = viewModel::clearFinishedScheduledDeletions
                                 )
 
                                 AppDestination.HISTORY -> HistoryScreen(

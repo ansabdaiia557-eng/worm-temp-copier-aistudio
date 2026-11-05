@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -17,6 +18,9 @@ class SettingsRepository(private val context: Context) {
     private object Keys {
         val ACTIVE_DEST_PATH = stringPreferencesKey("active_dest_path")
         val ACTIVE_DEST_URI = stringPreferencesKey("active_dest_uri")
+        val SELECTED_GAME_EDITION = stringPreferencesKey("selected_game_edition")
+        val AUTO_DELETE_ENABLED = booleanPreferencesKey("auto_delete_enabled")
+        val DEFAULT_RETENTION_MINUTES = intPreferencesKey("default_retention_minutes")
         val AUTO_USE_SHIZUKU = booleanPreferencesKey("auto_use_shizuku")
         val CONFIRM_OVERWRITE = booleanPreferencesKey("confirm_overwrite")
         val VERIFY_SHA256 = booleanPreferencesKey("verify_sha256")
@@ -30,6 +34,9 @@ class SettingsRepository(private val context: Context) {
         AppSettings(
             activeDestinationPath = prefs[Keys.ACTIVE_DEST_PATH] ?: DEFAULT_PUFFER_TEMP_PATH,
             activeDestinationTreeUri = prefs[Keys.ACTIVE_DEST_URI],
+            selectedGameEdition = prefs[Keys.SELECTED_GAME_EDITION] ?: GameEditionKey.PUBG_GLOBAL.name,
+            autoDeleteEnabled = prefs[Keys.AUTO_DELETE_ENABLED] ?: true,
+            defaultRetentionMinutes = prefs[Keys.DEFAULT_RETENTION_MINUTES]?.coerceIn(1, 10) ?: 3,
             autoUseShizuku = prefs[Keys.AUTO_USE_SHIZUKU] ?: true,
             confirmOverwrite = prefs[Keys.CONFIRM_OVERWRITE] ?: true,
             verifySha256 = prefs[Keys.VERIFY_SHA256] ?: true,
@@ -49,6 +56,19 @@ class SettingsRepository(private val context: Context) {
                 prefs.remove(Keys.ACTIVE_DEST_URI)
             }
         }
+    }
+
+    suspend fun setSelectedGameEdition(editionKeyName: String) {
+        context.dataStore.edit { it[Keys.SELECTED_GAME_EDITION] = editionKeyName }
+    }
+
+    suspend fun setAutoDeleteEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.AUTO_DELETE_ENABLED] = enabled }
+    }
+
+    suspend fun setDefaultRetentionMinutes(minutes: Int) {
+        val clamped = minutes.coerceIn(1, 10)
+        context.dataStore.edit { it[Keys.DEFAULT_RETENTION_MINUTES] = clamped }
     }
 
     suspend fun setAutoUseShizuku(enabled: Boolean) {
@@ -83,6 +103,9 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { prefs ->
             prefs.clear()
             prefs[Keys.ACTIVE_DEST_PATH] = DEFAULT_PUFFER_TEMP_PATH
+            prefs[Keys.SELECTED_GAME_EDITION] = GameEditionKey.PUBG_GLOBAL.name
+            prefs[Keys.AUTO_DELETE_ENABLED] = true
+            prefs[Keys.DEFAULT_RETENTION_MINUTES] = 3
             prefs[Keys.AUTO_USE_SHIZUKU] = true
             prefs[Keys.CONFIRM_OVERWRITE] = true
             prefs[Keys.VERIFY_SHA256] = true

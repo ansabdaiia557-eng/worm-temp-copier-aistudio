@@ -16,8 +16,8 @@ android {
     applicationId = "com.aistudio.wormtempcopier.xkpqzr"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
-    versionName = "1.2.0"
+    versionCode = 2
+    versionName = "1.3.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -127,6 +127,7 @@ dependencies {
   // implementation(libs.okhttp)
   // implementation(libs.play.services.location)
   // implementation(libs.retrofit)
+  implementation(libs.androidx.work.runtime.ktx)
   implementation(libs.shizuku.api)
   implementation(libs.shizuku.provider)
   testImplementation(libs.androidx.compose.ui.test.junit4)

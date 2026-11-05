@@ -60,19 +60,54 @@ interface ErrorLogDao {
     suspend fun clearAllLogs()
 }
 
+@Dao
+interface ScheduledDeletionDao {
+    @Query("SELECT * FROM scheduled_deletions WHERE isDeleted = 0 AND cancelled = 0 ORDER BY deleteAtMillis ASC")
+    fun getPendingDeletions(): Flow<List<ScheduledDeletionEntity>>
+
+    @Query("SELECT * FROM scheduled_deletions ORDER BY copiedAtMillis DESC LIMIT 100")
+    fun getAllScheduledDeletions(): Flow<List<ScheduledDeletionEntity>>
+
+    @Query("SELECT * FROM scheduled_deletions WHERE uniqueCopyId = :id LIMIT 1")
+    suspend fun getById(id: String): ScheduledDeletionEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(entity: ScheduledDeletionEntity)
+
+    @Update
+    suspend fun update(entity: ScheduledDeletionEntity)
+
+    @Query("UPDATE scheduled_deletions SET cancelled = 1 WHERE uniqueCopyId = :id")
+    suspend fun cancelSchedule(id: String)
+
+    @Query("UPDATE scheduled_deletions SET isDeleted = 1, failureReason = null WHERE uniqueCopyId = :id")
+    suspend fun markDeleted(id: String)
+
+    @Query("UPDATE scheduled_deletions SET failureReason = :reason WHERE uniqueCopyId = :id")
+    suspend fun markFailed(id: String, reason: String)
+
+    @Delete
+    suspend fun delete(entity: ScheduledDeletionEntity)
+
+    @Query("DELETE FROM scheduled_deletions WHERE isDeleted = 1 OR cancelled = 1")
+    suspend fun clearFinished()
+}
+
 @Database(
     entities = [
         SavedPathEntity::class,
         OperationHistoryEntity::class,
-        ErrorLogEntity::class
+        ErrorLogEntity::class,
+        ScheduledDeletionEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun savedPathDao(): SavedPathDao
     abstract fun operationHistoryDao(): OperationHistoryDao
     abstract fun errorLogDao(): ErrorLogDao
+    abstract fun scheduledDeletionDao(): ScheduledDeletionDao
 
     companion object {
         @Volatile

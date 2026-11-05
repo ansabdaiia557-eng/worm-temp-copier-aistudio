@@ -7,6 +7,7 @@ import android.os.StatFs
 import android.provider.OpenableColumns
 import androidx.documentfile.provider.DocumentFile
 import com.example.data.FileTransferItemResult
+import com.example.data.GamePathAccessState
 import com.example.data.OperationStatus
 import com.example.data.OperationType
 import com.example.data.PathAccessStatus
@@ -224,13 +225,117 @@ class FileOperationEngine(
         return PathAccessStatus.NEEDS_SHIZUKU
     }
 
-    fun isRestrictedAndroidDataPath(path: String): Boolean {
-        val normalized = path.replace('\\', '/')
-        val ownPkg = context.packageName
-        if (normalized.contains("/Android/data/$ownPkg") || normalized.contains("/Android/obb/$ownPkg")) {
-            return false
+    /**
+     * Specifically checks game edition path availability:
+     * - Returns NOT_FOUND if app package is not installed or base folder does not exist
+     * - Returns PERMISSION_REQUIRED if access needs Shizuku/SAF and it is not granted
+     * - Returns AVAILABLE if accessible or writable
+     */
+    suspend fun checkGamePathAccessStatus(path: String, packageName: String): GamePathAccessState = withContext(Dispatchers.IO) {
+        val packageInstalled = shizukuManager?.isPackageInstalled(packageName) ?: false
+        val fileObj = File(path)
+
+        if (fileObj.exists() && fileObj.canWrite()) {
+            return@withContext GamePathAccessState.AVAILABLE
         }
-        return normalized.contains("/Android/data/") || normalized.contains("/Android/obb/")
+
+        // For restricted Android/data paths
+        if (isRestrictedAndroidDataPath(path)) {
+            val status = shizukuManager?.refreshStatus()
+            if (status != null && status.isReadyForElevatedOps) {
+                val exists = shizukuManager.directoryExistsViaShizuku(path)
+                return@withContext if (exists || packageInstalled) {
+                    GamePathAccessState.AVAILABLE
+                } else {
+                    GamePathAccessState.NOT_FOUND
+                }
+            } else {
+                return@withContext if (packageInstalled || isDirectoryProbeFound(path)) {
+                    GamePathAccessState.PERMISSION_REQUIRED
+                } else {
+                    GamePathAccessState.NOT_FOUND
+                }
+            }
+        }
+
+        if (fileObj.exists()) {
+            return@withContext GamePathAccessState.AVAILABLE
+        }
+
+        val parent = fileObj.parentFile
+        if (parent != null && parent.exists() && parent.canWrite()) {
+            return@withContext GamePathAccessState.AVAILABLE
+        }
+
+        if (packageInstalled) {
+            GamePathAccessState.PERMISSION_REQUIRED
+        } else {
+            GamePathAccessState.NOT_FOUND
+        }
+    }
+
+    private fun isDirectoryProbeFound(path: String): Boolean {
+        var cursor: File? = File(path)
+        while (cursor != null) {
+            if (cursor.exists()) return true
+            cursor = cursor.parentFile
+        }
+        return false
+    }
+
+    /**
+     * Safe deletion of a temporary copy:
+     * - Verifies that the file is indeed the target copy inside the destination
+     * - Verifies the SHA-256 fingerprint if available to prevent deleting unrelated files
+     * - Refuses to delete if file has been modified or replaced
+     */
+    suspend fun safeDeleteTemporaryCopy(
+        targetFilePath: String,
+        expectedSha256: String?
+    ): Pair<Boolean, String?> = withContext(Dispatchers.IO) {
+        val target = File(targetFilePath)
+
+        // 1. If accessible directly
+        if (target.exists() && target.isFile) {
+            return@withContext safeDeleteDirectFile(target, expectedSha256)
+        }
+
+        // 2. If in restricted Android/data path, use Shizuku
+        if (isRestrictedAndroidDataPath(targetFilePath)) {
+            val status = shizukuManager.refreshStatus()
+            if (!status.isReadyForElevatedOps) {
+                return@withContext false to "Shizuku service/permission required to delete from Android/data"
+            }
+
+            val exists = shizukuManager.fileExistsViaShizuku(targetFilePath)
+            if (!exists) {
+                return@withContext true to null // already gone
+            }
+
+            if (!expectedSha256.isNullOrBlank()) {
+                val currentHash = shizukuManager.computeSha256ViaShizuku(targetFilePath)
+                if (currentHash != null && currentHash != expectedSha256) {
+                    return@withContext false to "Target file SHA-256 changed or was modified since copy."
+                }
+            }
+
+            val res = shizukuManager.deleteFileViaShizuku(targetFilePath)
+            return@withContext if (res.isSuccess) {
+                true to null
+            } else {
+                false to (res.stderr.ifBlank { "Shizuku rm failed with code ${res.exitCode}" })
+            }
+        }
+
+        if (!target.exists()) {
+            return@withContext true to null
+        }
+
+        false to "Target file not found or inaccessible"
+    }
+
+    fun isRestrictedAndroidDataPath(path: String): Boolean {
+        return isRestrictedPath(path, context.packageName)
     }
 
     /**
@@ -473,6 +578,7 @@ class FileOperationEngine(
                         deleteOriginalSource(item)
                     }
 
+                    val uniqueCopyId = "copy_${System.currentTimeMillis()}_${java.util.UUID.randomUUID().toString().take(8)}"
                     return@withContext FileTransferItemResult(
                         fileName = item.name,
                         fileSize = item.sizeBytes,
@@ -480,7 +586,9 @@ class FileOperationEngine(
                         sha256Verified = verifySha256 && verified,
                         originalHash = originalHash,
                         targetHash = targetHash,
-                        message = "${operationType.name} completed via SAF"
+                        message = "${operationType.name} completed via SAF",
+                        uniqueCopyId = uniqueCopyId,
+                        targetFullPath = targetFullPath
                     ) to false
                 } catch (t: Throwable) {
                     targetDoc.delete()
@@ -566,6 +674,7 @@ class FileOperationEngine(
                     deleteOriginalSource(item)
                 }
 
+                val uniqueCopyId = "copy_${System.currentTimeMillis()}_${java.util.UUID.randomUUID().toString().take(8)}"
                 return@withContext FileTransferItemResult(
                     fileName = item.name,
                     fileSize = item.sizeBytes,
@@ -573,7 +682,9 @@ class FileOperationEngine(
                     sha256Verified = verifySha256 && verified,
                     originalHash = originalHash,
                     targetHash = targetHash,
-                    message = "${operationType.name} completed and verified"
+                    message = "${operationType.name} completed and verified",
+                    uniqueCopyId = uniqueCopyId,
+                    targetFullPath = targetFile.absolutePath
                 ) to false
             } catch (t: Throwable) {
                 if (tempFile.exists()) {
@@ -686,6 +797,7 @@ class FileOperationEngine(
                 deleteOriginalSource(item)
             }
 
+            val uniqueCopyId = "copy_${System.currentTimeMillis()}_${java.util.UUID.randomUUID().toString().take(8)}"
             return@withContext FileTransferItemResult(
                 fileName = item.name,
                 fileSize = item.sizeBytes,
@@ -693,7 +805,9 @@ class FileOperationEngine(
                 sha256Verified = verifySha256 && verified,
                 originalHash = originalHash,
                 targetHash = targetHash,
-                message = "${operationType.name} completed via Shizuku"
+                message = "${operationType.name} completed via Shizuku",
+                uniqueCopyId = uniqueCopyId,
+                targetFullPath = targetFullPath
             ) to true
         } finally {
             tempStageFile?.delete()
@@ -731,6 +845,59 @@ class FileOperationEngine(
             val units = arrayOf("B", "KB", "MB", "GB", "TB")
             val digitGroups = (log10(bytes.toDouble()) / log10(1024.0)).toInt().coerceIn(0, units.lastIndex)
             return DecimalFormat("#,##0.##").format(bytes / 1024.0.pow(digitGroups.toDouble())) + " " + units[digitGroups]
+        }
+
+        fun computeSha256ForFile(file: File): String? {
+            if (!file.exists() || !file.canRead()) return null
+            return try {
+                val digest = MessageDigest.getInstance("SHA-256")
+                val buffer = ByteArray(8192)
+                file.inputStream().use { stream ->
+                    var bytesRead = stream.read(buffer)
+                    while (bytesRead != -1) {
+                        digest.update(buffer, 0, bytesRead)
+                        bytesRead = stream.read(buffer)
+                    }
+                }
+                digest.digest().joinToString("") { "%02x".format(it) }
+            } catch (_: Throwable) {
+                null
+            }
+        }
+
+        fun computeSha256FromStream(inputStream: InputStream): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+            val buffer = ByteArray(8192)
+            var bytesRead = inputStream.read(buffer)
+            while (bytesRead != -1) {
+                digest.update(buffer, 0, bytesRead)
+                bytesRead = inputStream.read(buffer)
+            }
+            return digest.digest().joinToString("") { "%02x".format(it) }
+        }
+
+        fun isRestrictedPath(path: String, ownPackage: String = ""): Boolean {
+            val normalized = path.replace('\\', '/')
+            if (ownPackage.isNotBlank() && (normalized.contains("/Android/data/$ownPackage") || normalized.contains("/Android/obb/$ownPackage"))) {
+                return false
+            }
+            return normalized.contains("/Android/data/") || normalized.contains("/Android/obb/")
+        }
+
+        fun safeDeleteDirectFile(target: File, expectedSha256: String?): Pair<Boolean, String?> {
+            if (!target.exists()) return true to null
+            if (!expectedSha256.isNullOrBlank()) {
+                val currentHash = computeSha256ForFile(target)
+                if (currentHash != null && currentHash != expectedSha256) {
+                    return false to "SHA-256 mismatch: File was modified or replaced after copy!"
+                }
+            }
+            val deleted = target.delete()
+            return if (deleted) {
+                true to null
+            } else {
+                false to "Could not delete file from filesystem (Permission Denied)"
+            }
         }
     }
 }

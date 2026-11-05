@@ -16,11 +16,14 @@ import com.example.data.DEFAULT_PUFFER_TEMP_PATH
 import com.example.data.ErrorLogEntity
 import com.example.data.FileSortOption
 import com.example.data.FileTransferItemResult
+import com.example.data.GamePathAccessState
 import com.example.data.OperationHistoryEntity
 import com.example.data.OperationStatus
 import com.example.data.OperationType
 import com.example.data.PathAccessStatus
+import com.example.data.PRESET_GAME_EDITIONS
 import com.example.data.SavedPathEntity
+import com.example.data.ScheduledDeletionEntity
 import com.example.data.SelectedFileItem
 import com.example.data.SettingsRepository
 import com.example.data.TransferProgressState
@@ -50,6 +53,7 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
     private val savedPathDao = database.savedPathDao()
     private val historyDao = database.operationHistoryDao()
     private val errorLogDao = database.errorLogDao()
+    private val scheduledDeletionDao = database.scheduledDeletionDao()
 
     val settingsRepository = SettingsRepository(application)
     val shizukuManager = ShizukuManager(application)
@@ -87,6 +91,15 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
         initialValue = emptyList()
     )
 
+    val scheduledDeletions: StateFlow<List<ScheduledDeletionEntity>> = scheduledDeletionDao.getPendingDeletions().stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    private val _gameEditionStatuses = MutableStateFlow<Map<String, GamePathAccessState>>(emptyMap())
+    val gameEditionStatuses: StateFlow<Map<String, GamePathAccessState>> = _gameEditionStatuses.asStateFlow()
+
     private val _selectedFiles = MutableStateFlow<List<SelectedFileItem>>(emptyList())
     val selectedFiles: StateFlow<List<SelectedFileItem>> = _selectedFiles.asStateFlow()
 
@@ -114,6 +127,21 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
             // Populate initial sample test files so user can immediately inspect & test
             val sampleFiles = fileEngine.createSampleTestFiles()
             _selectedFiles.value = sampleFiles
+            refreshGameEditionStatuses()
+        }
+    }
+
+    fun refreshGameEditionStatuses() {
+        viewModelScope.launch {
+            val map = mutableMapOf<String, GamePathAccessState>()
+            for (edition in PRESET_GAME_EDITIONS) {
+                val state = fileEngine.checkGamePathAccessStatus(
+                    path = edition.defaultPufferPath,
+                    packageName = edition.packageName
+                )
+                map[edition.packageName] = state
+            }
+            _gameEditionStatuses.value = map
         }
     }
 
@@ -610,6 +638,36 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
                         successfullyMovedIds.add(item.id)
                     }
 
+                    // Auto-Delete Scheduling: starts countdown only after successful COPY
+                    if (operationType == OperationType.COPY && itemResult.status == OperationStatus.SUCCESS && currentSettings.autoDeleteEnabled) {
+                        val copyId = itemResult.uniqueCopyId ?: "copy_${System.currentTimeMillis()}"
+                        val targetPath = itemResult.targetFullPath ?: "$destPath/${item.name}"
+                        val retentionMinutes = currentSettings.defaultRetentionMinutes.coerceIn(1, 10)
+                        val now = System.currentTimeMillis()
+                        val delayMillis = retentionMinutes * 60 * 1000L
+                        val deleteAt = now + delayMillis
+
+                        val scheduledEntity = ScheduledDeletionEntity(
+                            uniqueCopyId = copyId,
+                            fileName = item.name,
+                            destinationPath = targetPath,
+                            fileSize = item.sizeBytes,
+                            expectedSha256 = itemResult.targetHash ?: itemResult.originalHash,
+                            gameEditionName = PRESET_GAME_EDITIONS.find { it.key.name == currentSettings.selectedGameEdition }?.title ?: "PUBG MOBILE",
+                            durationMinutes = retentionMinutes,
+                            copiedAtMillis = now,
+                            deleteAtMillis = deleteAt,
+                            isDeleted = false,
+                            cancelled = false
+                        )
+                        scheduledDeletionDao.insert(scheduledEntity)
+                        com.example.autodelete.AutoDeleteWorker.scheduleDeletion(
+                            context = getApplication(),
+                            uniqueCopyId = copyId,
+                            delayMillis = delayMillis
+                        )
+                    }
+
                     if (currentSettings.keepHistory) {
                         historyDao.insertHistory(
                             OperationHistoryEntity(
@@ -790,6 +848,100 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
 
     fun setDarkMode(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setDarkMode(enabled) }
+    }
+
+    fun selectGameEdition(edition: com.example.data.GameEditionInfo) {
+        viewModelScope.launch {
+            settingsRepository.setSelectedGameEdition(edition.key.name)
+            settingsRepository.setActiveDestination(edition.defaultPufferPath, null)
+            saveOrUpdateRecentPath(
+                name = edition.title,
+                path = edition.defaultPufferPath,
+                treeUriString = null
+            )
+            refreshGameEditionStatuses()
+            showBanner(
+                if (settings.value.languageCode == "ar") {
+                    "تم اختيار ${edition.title} وتعيين المسار تلقائياً"
+                } else {
+                    "Selected ${edition.title} and set destination"
+                }
+            )
+        }
+    }
+
+    fun updateGameEditionPath(edition: com.example.data.GameEditionInfo, newPath: String) {
+        val clean = newPath.trim()
+        if (!clean.startsWith("/")) return
+        viewModelScope.launch {
+            settingsRepository.setActiveDestination(clean, null)
+            saveOrUpdateRecentPath(name = edition.title, path = clean, treeUriString = null)
+            refreshGameEditionStatuses()
+        }
+    }
+
+    fun setAutoDeleteEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setAutoDeleteEnabled(enabled) }
+    }
+
+    fun setDefaultRetentionMinutes(minutes: Int) {
+        viewModelScope.launch { settingsRepository.setDefaultRetentionMinutes(minutes) }
+    }
+
+    fun cancelScheduledDeletion(uniqueCopyId: String) {
+        viewModelScope.launch {
+            scheduledDeletionDao.cancelSchedule(uniqueCopyId)
+            com.example.autodelete.AutoDeleteWorker.cancelScheduledWork(getApplication(), uniqueCopyId)
+            showBanner(
+                if (settings.value.languageCode == "ar") {
+                    "تم إلغاء الجدولة • لن يتم حذف النسخة تلقائياً"
+                } else {
+                    "Scheduled deletion cancelled"
+                }
+            )
+        }
+    }
+
+    fun deleteScheduledCopyNow(entity: com.example.data.ScheduledDeletionEntity) {
+        viewModelScope.launch {
+            com.example.autodelete.AutoDeleteWorker.cancelScheduledWork(getApplication(), entity.uniqueCopyId)
+            val (success, reason) = fileEngine.safeDeleteTemporaryCopy(
+                targetFilePath = entity.destinationPath,
+                expectedSha256 = entity.expectedSha256
+            )
+            val notifId = entity.uniqueCopyId.hashCode()
+            if (success) {
+                scheduledDeletionDao.markDeleted(entity.uniqueCopyId)
+                com.example.autodelete.DeletionNotificationHelper.notifyDeletionSuccess(
+                    context = getApplication(),
+                    notificationId = notifId,
+                    fileName = entity.fileName,
+                    gameEditionName = entity.gameEditionName,
+                    retentionMinutes = entity.durationMinutes
+                )
+                showBanner(
+                    if (settings.value.languageCode == "ar") {
+                        "تم حذف النسخة المؤقتة بنجاح (${entity.fileName})"
+                    } else {
+                        "Temporary copy deleted successfully (${entity.fileName})"
+                    }
+                )
+            } else {
+                val err = reason ?: "Failed to delete"
+                scheduledDeletionDao.markFailed(entity.uniqueCopyId, err)
+                com.example.autodelete.DeletionNotificationHelper.notifyDeletionFailure(
+                    context = getApplication(),
+                    notificationId = notifId,
+                    fileName = entity.fileName,
+                    reason = err
+                )
+                showBanner(err, isError = true)
+            }
+        }
+    }
+
+    fun clearFinishedScheduledDeletions() {
+        viewModelScope.launch { scheduledDeletionDao.clearFinished() }
     }
 
     fun resetAllSettings(confirmMsg: String) {

@@ -96,6 +96,17 @@ class ShizukuManager(private val context: Context) {
         }
     }
 
+    fun isPackageInstalled(packageName: String): Boolean {
+        return try {
+            context.packageManager.getPackageInfo(packageName, 0)
+            true
+        } catch (_: PackageManager.NameNotFoundException) {
+            false
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
     fun refreshStatus(customMessage: String? = null): ShizukuStatus {
         val installed = isShizukuAppInstalled()
         val binderAlive = try {
@@ -231,7 +242,7 @@ class ShizukuManager(private val context: Context) {
             }
 
             try {
-                // Invoke Shizuku.newProcess via reflection/direct API to avoid restricted visibility warnings
+                // Invoke Shizuku.newProcess via reflection to avoid visibility/linker constraints
                 val newProcessMethod = Shizuku::class.java.getDeclaredMethod(
                     "newProcess",
                     Array<String>::class.java,
@@ -292,6 +303,12 @@ class ShizukuManager(private val context: Context) {
         return res.isSuccess
     }
 
+    suspend fun directoryExistsViaShizuku(dirPath: String): Boolean {
+        val escaped = escapeShellArg(dirPath)
+        val res = executeShellCommand("test -d $escaped")
+        return res.isSuccess
+    }
+
     suspend fun copyFileViaShizuku(sourcePath: String, targetPath: String): ShellCommandResult {
         val srcEscaped = escapeShellArg(sourcePath)
         val dstEscaped = escapeShellArg(targetPath)
@@ -314,6 +331,11 @@ class ShizukuManager(private val context: Context) {
             ""
         }
         return executeShellCommand("${mkdirCmd}mv -f $srcEscaped $dstEscaped")
+    }
+
+    suspend fun deleteFileViaShizuku(filePath: String): ShellCommandResult {
+        val escaped = escapeShellArg(filePath)
+        return executeShellCommand("rm -f $escaped")
     }
 
     suspend fun computeSha256ViaShizuku(filePath: String): String? {

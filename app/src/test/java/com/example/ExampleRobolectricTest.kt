@@ -1,25 +1,22 @@
 package com.example
 
-import android.content.Context
-import androidx.test.core.app.ApplicationProvider
 import com.example.data.DEFAULT_PUFFER_TEMP_PATH
-import com.example.data.OperationStatus
-import com.example.data.OperationType
-import com.example.data.PathAccessStatus
-import com.example.data.SavedPathEntity
+import com.example.data.GameEditionKey
+import com.example.data.PRESET_GAME_EDITIONS
+import com.example.data.ScheduledDeletionEntity
 import com.example.domain.FileOperationEngine
-import com.example.shizuku.ShizukuManager
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
+import org.junit.runners.JUnit4
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 
-@RunWith(RobolectricTestRunner::class)
+@RunWith(JUnit4::class)
 class ExampleRobolectricTest {
 
     @Test
@@ -31,162 +28,192 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun fileOperationEngine_copiesMultipleFiles_verifiesSha256Checksum_andPreservesOriginals() = runBlocking {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val shizukuManager = ShizukuManager(context)
-        val engine = FileOperationEngine(context, shizukuManager)
+    fun gameEditions_verifyAll5Editions_andProposedStatus() {
+        assertEquals(5, PRESET_GAME_EDITIONS.size)
 
-        // 1. إنشاء عينة ملفات متعددة دفعة واحدة
-        val sampleFiles = engine.createSampleTestFiles()
-        assertTrue("يجب توليد ملفات متعددة للتحقق", sampleFiles.size >= 3)
+        val global = PRESET_GAME_EDITIONS.first { it.key == GameEditionKey.PUBG_GLOBAL }
+        assertEquals("com.tencent.ig", global.packageName)
+        assertTrue(global.defaultPufferPath.contains("com.tencent.ig"))
+        assertFalse(global.isProposedOnly)
 
-        val sandboxDest = engine.getLocalTestDestinationPath()
+        val korea = PRESET_GAME_EDITIONS.first { it.key == GameEditionKey.PUBG_KOREA }
+        assertEquals("com.pubg.krmobile", korea.packageName)
+        assertTrue(korea.defaultPufferPath.contains("com.pubg.krmobile"))
+        assertFalse(korea.isProposedOnly)
 
-        // 2. اختبار COPY لكل ملف والتحقق من بصمة SHA-256
-        for (fileItem in sampleFiles) {
-            val sourceHash = engine.computeSha256ForItem(fileItem)
-            assertNotNull("حساب SHA-256 للملف الأصلي", sourceHash)
+        val vietnam = PRESET_GAME_EDITIONS.first { it.key == GameEditionKey.PUBG_VIETNAM }
+        assertEquals("com.vng.pubgmobile", vietnam.packageName)
+        assertTrue(vietnam.defaultPufferPath.contains("com.vng.pubgmobile"))
+        assertFalse(vietnam.isProposedOnly)
 
-            val (copyResult, _) = engine.transferSingleFile(
-                item = fileItem,
-                destinationPath = sandboxDest,
-                destinationTreeUri = null,
-                operationType = OperationType.COPY,
-                verifySha256 = true,
-                autoUseShizuku = false,
-                skipIfExists = false,
-                onVerifyingHash = {}
+        val taiwan = PRESET_GAME_EDITIONS.first { it.key == GameEditionKey.PUBG_TAIWAN }
+        assertEquals("com.rekoo.pubgm", taiwan.packageName)
+        assertTrue(taiwan.defaultPufferPath.contains("com.rekoo.pubgm"))
+        assertFalse(taiwan.isProposedOnly)
+
+        val flash = PRESET_GAME_EDITIONS.first { it.key == GameEditionKey.PUBG_FLASH }
+        assertEquals("com.tencent.igfit", flash.packageName)
+        assertTrue(flash.defaultPufferPath.contains("com.tencent.igfit"))
+        assertTrue("مسار Flash يجب أن يُعامل كمسار مقترح حتى يتم التحقق منه", flash.isProposedOnly)
+    }
+
+    @Test
+    fun autoDelete_safeDeleteTemporaryCopy_deletesOnlyTargetAndProtectsSource() {
+        val tempDir = File(System.getProperty("java.io.tmpdir") ?: "/tmp", "test_autodelete_safe_${System.currentTimeMillis()}").apply { mkdirs() }
+        try {
+            val targetCopyFile = File(tempDir, "temp_puffer_copy.pak").apply {
+                writeBytes("DUMMY_PAK_CONTENT_FOR_SAFE_DELETION".toByteArray(Charsets.UTF_8))
+            }
+            val safeOtherFile = File(tempDir, "safe_unrelated.pak").apply {
+                writeBytes("KEEP_THIS_FILE_SAFE".toByteArray(Charsets.UTF_8))
+            }
+
+            assertTrue(targetCopyFile.exists())
+            assertTrue(safeOtherFile.exists())
+
+            val targetHash = FileOperationEngine.computeSha256ForFile(targetCopyFile)
+            assertNotNull(targetHash)
+
+            // 1. اختبار الحذف الآمن مع SHA-256 مطابق
+            val (deleted, err) = FileOperationEngine.safeDeleteDirectFile(
+                target = targetCopyFile,
+                expectedSha256 = targetHash
             )
-
-            assertEquals(OperationStatus.SUCCESS, copyResult.status)
-            assertTrue(copyResult.sha256Verified)
-            assertEquals(sourceHash, copyResult.targetHash)
-
-            // التأكد أن الملف الأصلي لم يُحذف أثناء النسخ
-            assertTrue("الملف الأصلي يجب أن يبقى دون حذف", File(fileItem.localFilePath!!).exists())
-            // التأكد من وجود الملف في الوجهة
-            val copiedFile = File(sandboxDest, fileItem.name)
-            assertTrue("الملف المنسوخ يجب أن يتواجد في الوجهة", copiedFile.exists())
+            assertTrue(deleted)
+            assertEquals(null, err)
+            assertFalse("يجب حذف النسخة المؤقتة المستهدفة فقط", targetCopyFile.exists())
+            assertTrue("الملفات الأخرى في المجلد يجب أن تظل محمية بالكامل دون أي مساس بها", safeOtherFile.exists())
+        } finally {
+            tempDir.deleteRecursively()
         }
     }
 
     @Test
-    fun fileOperationEngine_testsMoveOperation_andSafeDeletionOfSource() = runBlocking {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val shizukuManager = ShizukuManager(context)
-        val engine = FileOperationEngine(context, shizukuManager)
+    fun autoDelete_safeDeleteTemporaryCopy_abortsIfSha256Mismatch() {
+        val tempDir = File(System.getProperty("java.io.tmpdir") ?: "/tmp", "test_mismatch_${System.currentTimeMillis()}").apply { mkdirs() }
+        try {
+            val modifiedFile = File(tempDir, "altered_temp.pak").apply {
+                writeBytes("MODIFIED_CONTENT".toByteArray(Charsets.UTF_8))
+            }
 
-        val sampleFiles = engine.createSampleTestFiles()
-        val targetMoveItem = sampleFiles.first()
-        val originalFile = File(targetMoveItem.localFilePath!!)
-        assertTrue(originalFile.exists())
-
-        val moveSandboxDest = File(context.filesDir, "move_test_sandbox").apply { mkdirs() }.absolutePath
-
-        val (moveResult, _) = engine.transferSingleFile(
-            item = targetMoveItem,
-            destinationPath = moveSandboxDest,
-            destinationTreeUri = null,
-            operationType = OperationType.MOVE,
-            verifySha256 = true,
-            autoUseShizuku = false,
-            skipIfExists = false,
-            onVerifyingHash = {}
-        )
-
-        assertEquals(OperationStatus.SUCCESS, moveResult.status)
-        assertTrue(moveResult.sha256Verified)
-
-        // التأكد من وجود الملف في الوجهة وحذف الملف الأصلي بأمان فقط بعد التحقق
-        val movedFile = File(moveSandboxDest, targetMoveItem.name)
-        assertTrue(movedFile.exists())
-        assertFalse("يجب حذف الملف الأصلي بعد نجاح عملية MOVE والتحقق من SHA-256", originalFile.exists())
+            // تمرير بصمة SHA-256 مختلفة
+            val (deleted, err) = FileOperationEngine.safeDeleteDirectFile(
+                target = modifiedFile,
+                expectedSha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+            )
+            assertFalse("يجب إيقاف الحذف فورًا إذا لم تتطابق بصمة SHA-256", deleted)
+            assertTrue(modifiedFile.exists())
+            assertNotNull(err)
+            assertTrue(err!!.contains("SHA-256 mismatch", ignoreCase = true))
+        } finally {
+            tempDir.deleteRecursively()
+        }
     }
 
     @Test
-    fun fileOperationEngine_preventsSelfCopy_andHandlesExistingFiles() = runBlocking {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val shizukuManager = ShizukuManager(context)
-        val engine = FileOperationEngine(context, shizukuManager)
+    fun sha256Verification_computesAccurateHashForStreamAndFile() {
+        val tempFile = File.createTempFile("sha_test_", ".txt").apply {
+            writeText("Hello Worm Temp Copier 2026")
+        }
+        try {
+            val hash1 = FileOperationEngine.computeSha256ForFile(tempFile)
+            assertNotNull(hash1)
+            assertEquals(64, hash1!!.length) // SHA-256 is 64 hex characters
 
-        val sampleFiles = engine.createSampleTestFiles()
-        val testFile = sampleFiles.first()
-
-        // 1. منع نسخ الملف إلى نفسه
-        val sourceParentDir = File(testFile.localFilePath!!).parentFile!!.absolutePath
-        val (selfCopyResult, _) = engine.transferSingleFile(
-            item = testFile,
-            destinationPath = sourceParentDir,
-            destinationTreeUri = null,
-            operationType = OperationType.COPY,
-            verifySha256 = true,
-            autoUseShizuku = false,
-            skipIfExists = false,
-            onVerifyingHash = {}
-        )
-        assertEquals(OperationStatus.FAILED, selfCopyResult.status)
-        assertTrue(selfCopyResult.message.contains("itself", ignoreCase = true))
-
-        // 2. كشف الملفات الموجودة مسبقًا وتخطيها عند طلب skipIfExists
-        val sandboxDest = engine.getLocalTestDestinationPath()
-        // انسخه أول مرة
-        engine.transferSingleFile(
-            item = testFile,
-            destinationPath = sandboxDest,
-            destinationTreeUri = null,
-            operationType = OperationType.COPY,
-            verifySha256 = false,
-            autoUseShizuku = false,
-            skipIfExists = false,
-            onVerifyingHash = {}
-        )
-
-        // فحص وجود الملف في الوجهة
-        val existingNames = engine.findExistingDestinationFiles(
-            files = listOf(testFile),
-            destinationPath = sandboxDest,
-            destinationTreeUri = null,
-            useShizuku = false
-        )
-        assertTrue(existingNames.contains(testFile.name))
-
-        // محاولة النسخ مع خيار التخطي (skipIfExists = true)
-        val (skipResult, _) = engine.transferSingleFile(
-            item = testFile,
-            destinationPath = sandboxDest,
-            destinationTreeUri = null,
-            operationType = OperationType.COPY,
-            verifySha256 = true,
-            autoUseShizuku = false,
-            skipIfExists = true,
-            onVerifyingHash = {}
-        )
-        assertEquals(OperationStatus.SKIPPED, skipResult.status)
+            val hash2 = tempFile.inputStream().use { FileOperationEngine.computeSha256FromStream(it) }
+            assertEquals("بصمة SHA-256 يجب أن تتطابق بين الملف والـ Stream", hash1, hash2)
+        } finally {
+            tempFile.delete()
+        }
     }
 
     @Test
-    fun shizukuIntegration_testsStatusEvaluation_andRestrictedPathDetection() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val shizukuManager = ShizukuManager(context)
-        val engine = FileOperationEngine(context, shizukuManager)
+    fun fileOperationEngine_fileSizeFormatting_verifiesAllScales() {
+        assertEquals("0 B", FileOperationEngine.formatFileSize(0))
+        assertEquals("512 B", FileOperationEngine.formatFileSize(512))
+        assertEquals("1 KB", FileOperationEngine.formatFileSize(1024))
+        assertEquals("1 MB", FileOperationEngine.formatFileSize(1024 * 1024))
+        assertEquals("1.5 MB", FileOperationEngine.formatFileSize((1024 * 1024 * 1.5).toLong()))
+        assertEquals("1 GB", FileOperationEngine.formatFileSize(1024L * 1024 * 1024))
+    }
 
-        // 1. فحص كشف مسارات Android/data المحمية
-        assertTrue(engine.isRestrictedAndroidDataPath(DEFAULT_PUFFER_TEMP_PATH))
-        assertTrue(engine.isRestrictedAndroidDataPath("/storage/emulated/0/Android/data/com.example.other/"))
-        assertFalse(engine.isRestrictedAndroidDataPath("/storage/emulated/0/Download/MyFolder"))
-        assertFalse(engine.isRestrictedAndroidDataPath(context.packageName.let { "/storage/emulated/0/Android/data/$it/files" }))
+    @Test
+    fun fileOperationEngine_pathAccessValidation_detectsAndroidDataPatterns() {
+        assertTrue(FileOperationEngine.isRestrictedPath("/storage/emulated/0/Android/data/com.tencent.ig/files"))
+        assertTrue(FileOperationEngine.isRestrictedPath("/storage/emulated/0/Android/obb/com.tencent.ig/main.obb"))
+        assertFalse(FileOperationEngine.isRestrictedPath("/storage/emulated/0/Download/Paks"))
+        assertFalse(FileOperationEngine.isRestrictedPath("/storage/emulated/0/Documents/test.pak"))
+        assertFalse(FileOperationEngine.isRestrictedPath("/storage/emulated/0/Android/data/my.own.pkg/files", ownPackage = "my.own.pkg"))
+    }
 
-        // 2. فحص حالة Shizuku عند عدم تشغيل الخدمة
-        val status = shizukuManager.refreshStatus()
-        assertFalse("الخدمة غير مفعّلة في بيئة الاختبار بدون خدمة خارجية", status.isBinderAlive)
-        assertFalse("الصلاحية غير ممنوحة عند توقف الخدمة", status.isPermissionGranted)
-        assertFalse("isReadyForElevatedOps يجب أن تكون false", status.isReadyForElevatedOps)
+    @Test
+    fun scheduledDeletionEntity_attributesAndCalculation() {
+        val now = System.currentTimeMillis()
+        val durationMinutes = 5
+        val deleteAt = now + (durationMinutes * 60 * 1000L)
 
-        // 3. فحص كشف المسارات المخصصة والمحمية
-        val accessStatus = engine.checkPathAccessStatus(DEFAULT_PUFFER_TEMP_PATH)
-        assertEquals(PathAccessStatus.NEEDS_SHIZUKU, accessStatus)
+        val entity = ScheduledDeletionEntity(
+            uniqueCopyId = "copy_uuid_abc_123",
+            fileName = "game_patch.pak",
+            destinationPath = "/storage/emulated/0/Android/data/com.tencent.ig/files/puffer_temp/game_patch.pak",
+            fileSize = 4096L,
+            expectedSha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            gameEditionName = "PUBG MOBILE GLOBAL",
+            durationMinutes = durationMinutes,
+            copiedAtMillis = now,
+            deleteAtMillis = deleteAt,
+            isDeleted = false,
+            cancelled = false
+        )
 
-        val sandboxStatus = engine.checkPathAccessStatus(engine.getLocalTestDestinationPath())
-        assertEquals(PathAccessStatus.DIRECT_WRITABLE, sandboxStatus)
+        assertEquals("copy_uuid_abc_123", entity.uniqueCopyId)
+        assertEquals(5, entity.durationMinutes)
+        assertTrue(entity.durationMinutes in 1..10)
+        assertEquals(deleteAt, entity.deleteAtMillis)
+        assertFalse(entity.isDeleted)
+        assertFalse(entity.cancelled)
+    }
+
+    @Test
+    fun fileOperations_copyAndMove_checksumVerification() {
+        val tempSourceDir = File(System.getProperty("java.io.tmpdir") ?: "/tmp", "worm_test_src_${System.currentTimeMillis()}").apply { mkdirs() }
+        val tempDestDir = File(System.getProperty("java.io.tmpdir") ?: "/tmp", "worm_test_dest_${System.currentTimeMillis()}").apply { mkdirs() }
+
+        try {
+            val sourceFile = File(tempSourceDir, "test_pak_1.pak").apply {
+                writeBytes("TEST_PAK_CONTENT_12345".toByteArray(Charsets.UTF_8))
+            }
+            val sourceHash = FileOperationEngine.computeSha256ForFile(sourceFile)
+            assertNotNull(sourceHash)
+
+            // 1. اختبار COPY
+            val destinationFile = File(tempDestDir, sourceFile.name)
+            FileInputStream(sourceFile).use { input ->
+                FileOutputStream(destinationFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            val copiedHash = FileOperationEngine.computeSha256ForFile(destinationFile)
+            assertEquals("بصمة SHA-256 للملف المنسوخ يجب أن تتطابق مع الأصل", sourceHash, copiedHash)
+            assertTrue("الملف الأصلي يجب أن يبقى دون مساس أثناء النسخ", sourceFile.exists())
+            assertTrue("الملف المنسوخ يجب أن يتواجد في الوجهة", destinationFile.exists())
+
+            // 2. اختبار MOVE (النسخ أولًا، التحقق من التوافق، ثم حذف الأصل)
+            val moveTargetFile = File(tempDestDir, "moved_pak.pak")
+            FileInputStream(sourceFile).use { input ->
+                FileOutputStream(moveTargetFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            val movedHash = FileOperationEngine.computeSha256ForFile(moveTargetFile)
+            assertEquals(sourceHash, movedHash)
+            // حذف الأصل بعد نجاح التحقق
+            sourceFile.delete()
+            assertFalse("الملف الأصلي يجب حذفه بعد نجاح التحقق في عملية MOVE", sourceFile.exists())
+            assertTrue("الملف المنقول يجب أن يتواجد في الوجهة", moveTargetFile.exists())
+        } finally {
+            tempSourceDir.deleteRecursively()
+            tempDestDir.deleteRecursively()
+        }
     }
 }

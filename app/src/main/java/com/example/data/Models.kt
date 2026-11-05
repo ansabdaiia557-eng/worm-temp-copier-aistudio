@@ -7,6 +7,63 @@ import androidx.room.PrimaryKey
 const val DEFAULT_PUFFER_TEMP_PATH =
     "/storage/emulated/0/Android/data/com.tencent.ig/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/Paks/puffer_temp"
 
+// 1. Game Editions Data Models
+enum class GameEditionKey {
+    PUBG_GLOBAL,
+    PUBG_KOREA,
+    PUBG_VIETNAM,
+    PUBG_TAIWAN,
+    PUBG_FLASH
+}
+
+data class GameEditionInfo(
+    val key: GameEditionKey,
+    val title: String,
+    val packageName: String,
+    val defaultPufferPath: String,
+    val isProposedOnly: Boolean = false // e.g. PUBG FLASH is proposed until verified
+)
+
+val PRESET_GAME_EDITIONS = listOf(
+    GameEditionInfo(
+        key = GameEditionKey.PUBG_GLOBAL,
+        title = "PUBG MOBILE GLOBAL",
+        packageName = "com.tencent.ig",
+        defaultPufferPath = "/storage/emulated/0/Android/data/com.tencent.ig/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/Paks/puffer_temp"
+    ),
+    GameEditionInfo(
+        key = GameEditionKey.PUBG_KOREA,
+        title = "PUBG MOBILE KOREA",
+        packageName = "com.pubg.krmobile",
+        defaultPufferPath = "/storage/emulated/0/Android/data/com.pubg.krmobile/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/Paks/puffer_temp"
+    ),
+    GameEditionInfo(
+        key = GameEditionKey.PUBG_VIETNAM,
+        title = "PUBG MOBILE VIETNAM",
+        packageName = "com.vng.pubgmobile",
+        defaultPufferPath = "/storage/emulated/0/Android/data/com.vng.pubgmobile/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/Paks/puffer_temp"
+    ),
+    GameEditionInfo(
+        key = GameEditionKey.PUBG_TAIWAN,
+        title = "PUBG MOBILE TAIWAN",
+        packageName = "com.rekoo.pubgm",
+        defaultPufferPath = "/storage/emulated/0/Android/data/com.rekoo.pubgm/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/Paks/puffer_temp"
+    ),
+    GameEditionInfo(
+        key = GameEditionKey.PUBG_FLASH,
+        title = "PUBG MOBILE FLASH",
+        packageName = "com.tencent.igfit",
+        defaultPufferPath = "/storage/emulated/0/Android/data/com.tencent.igfit/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/Paks/puffer_temp",
+        isProposedOnly = true
+    )
+)
+
+enum class GamePathAccessState {
+    AVAILABLE,
+    PERMISSION_REQUIRED,
+    NOT_FOUND
+}
+
 enum class OperationType {
     COPY,
     MOVE
@@ -85,9 +142,29 @@ data class ErrorLogEntity(
     val details: String? = null
 )
 
+// Scheduled Deletion Entity (WorkManager & Room backed)
+@Entity(tableName = "scheduled_deletions")
+data class ScheduledDeletionEntity(
+    @PrimaryKey val uniqueCopyId: String, // UUID for the exact copy
+    val fileName: String,
+    val destinationPath: String, // Full file path inside destination folder
+    val fileSize: Long,
+    val expectedSha256: String?, // Checksum of copy to verify identity
+    val gameEditionName: String, // e.g. PUBG MOBILE GLOBAL
+    val durationMinutes: Int, // 1..10 minutes
+    val copiedAtMillis: Long,
+    val deleteAtMillis: Long, // timestamp when it should be deleted
+    val isDeleted: Boolean = false,
+    val cancelled: Boolean = false,
+    val failureReason: String? = null
+)
+
 data class AppSettings(
     val activeDestinationPath: String = DEFAULT_PUFFER_TEMP_PATH,
     val activeDestinationTreeUri: String? = null,
+    val selectedGameEdition: String = GameEditionKey.PUBG_GLOBAL.name,
+    val autoDeleteEnabled: Boolean = true,
+    val defaultRetentionMinutes: Int = 3, // 1..10
     val autoUseShizuku: Boolean = true,
     val confirmOverwrite: Boolean = true,
     val verifySha256: Boolean = true,
@@ -104,7 +181,9 @@ data class FileTransferItemResult(
     val sha256Verified: Boolean,
     val originalHash: String?,
     val targetHash: String?,
-    val message: String
+    val message: String,
+    val uniqueCopyId: String? = null,
+    val targetFullPath: String? = null
 )
 
 data class TransferProgressState(
