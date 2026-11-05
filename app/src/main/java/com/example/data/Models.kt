@@ -148,6 +148,8 @@ data class ScheduledDeletionEntity(
     @PrimaryKey val uniqueCopyId: String, // UUID for the exact copy
     val fileName: String,
     val destinationPath: String, // Full file path inside destination folder
+    val destinationTreeUri: String? = null, // SAF directory tree URI if used
+    val targetFileUri: String? = null, // Direct DocumentFile URI if created via SAF
     val fileSize: Long,
     val expectedSha256: String?, // Checksum of copy to verify identity
     val gameEditionName: String, // e.g. PUBG MOBILE GLOBAL
@@ -183,7 +185,8 @@ data class FileTransferItemResult(
     val targetHash: String?,
     val message: String,
     val uniqueCopyId: String? = null,
-    val targetFullPath: String? = null
+    val targetFullPath: String? = null,
+    val targetFileUri: String? = null
 )
 
 data class TransferProgressState(
@@ -197,4 +200,33 @@ data class TransferProgressState(
     val itemResults: List<FileTransferItemResult> = emptyList(),
     val summaryMessage: String? = null,
     val hasError: Boolean = false
+)
+
+enum class ContentCategory {
+    ALL_FEATURES,
+    SKINS,
+    AIM_SETTINGS
+}
+
+data class ContentItem(
+    val id: String,
+    val title: String,
+    val description: String,
+    val category: ContentCategory,
+    val version: String,
+    val sizeBytes: Long,
+    val updatedAt: String,
+    val targetFileName: String,
+    val sha256: String,
+    val downloadUrl: String,
+    val compatibleEditions: List<GameEditionKey> = listOf(
+        GameEditionKey.PUBG_GLOBAL,
+        GameEditionKey.PUBG_KOREA,
+        GameEditionKey.PUBG_VIETNAM,
+        GameEditionKey.PUBG_TAIWAN
+    ),
+    val isDownloaded: Boolean = false,
+    val localFilePath: String? = null,
+    val isDraft: Boolean = false,
+    val downloadProgress: Float = 0f
 )

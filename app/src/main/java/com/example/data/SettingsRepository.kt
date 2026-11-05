@@ -28,6 +28,15 @@ class SettingsRepository(private val context: Context) {
         val VIBRATE_ON_FAILURE = booleanPreferencesKey("vibrate_on_failure")
         val LANGUAGE_CODE = stringPreferencesKey("language_code")
         val DARK_MODE = booleanPreferencesKey("dark_mode")
+        val TELEGRAM_GATE_COMPLETED = booleanPreferencesKey("telegram_gate_completed")
+    }
+
+    val telegramGateCompletedFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[Keys.TELEGRAM_GATE_COMPLETED] ?: false
+    }
+
+    suspend fun setTelegramGateCompleted(completed: Boolean) {
+        context.dataStore.edit { it[Keys.TELEGRAM_GATE_COMPLETED] = completed }
     }
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { prefs ->

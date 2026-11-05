@@ -33,12 +33,14 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.HourglassBottom
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.outlined.FolderCopy
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.HourglassBottom
 import androidx.compose.material.icons.outlined.Route
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -65,12 +67,16 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.OperationType
+import com.example.data.GameEditionKey
+import com.example.data.PRESET_GAME_EDITIONS
 import com.example.ui.WormCopierViewModel
 import com.example.ui.components.SplashScreenOverlay
+import com.example.ui.components.TelegramGateDialog
 import com.example.ui.components.TransferConfirmationDialog
 import com.example.ui.i18n.ArabicStrings
 import com.example.ui.i18n.EnglishStrings
 import com.example.ui.i18n.LocalAppStrings
+import com.example.ui.screens.ContentCenterScreen
 import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.FileManagerScreen
 import com.example.ui.screens.HistoryScreen
@@ -94,6 +100,7 @@ enum class AppDestination(
     HOME("home", Icons.Filled.Home, Icons.Outlined.Home),
     FILES("files", Icons.Filled.FolderCopy, Icons.Outlined.FolderCopy),
     PATHS("paths", Icons.Filled.Route, Icons.Outlined.Route),
+    CONTENT("content", Icons.Filled.SportsEsports, Icons.Outlined.SportsEsports),
     AUTO_DELETE("autodelete", Icons.Filled.HourglassBottom, Icons.Outlined.HourglassBottom),
     HISTORY("history", Icons.Filled.History, Icons.Outlined.History),
     SETTINGS("settings", Icons.Filled.Settings, Icons.Outlined.Settings)
@@ -135,6 +142,21 @@ fun WormCopierApp(
 
     val scheduledDeletions by viewModel.scheduledDeletions.collectAsStateWithLifecycle()
     val gameEditionStatuses by viewModel.gameEditionStatuses.collectAsStateWithLifecycle()
+    val telegramGateCompleted by viewModel.telegramGateCompleted.collectAsStateWithLifecycle()
+    val contentItems by viewModel.contentItems.collectAsStateWithLifecycle()
+    val downloadingItemId by viewModel.downloadingItemId.collectAsStateWithLifecycle()
+    val downloadProgress by viewModel.downloadProgress.collectAsStateWithLifecycle()
+
+    val activeEditionKey = remember(settings.selectedGameEdition) {
+        try {
+            GameEditionKey.valueOf(settings.selectedGameEdition)
+        } catch (_: Exception) {
+            GameEditionKey.PUBG_GLOBAL
+        }
+    }
+    val activeEditionTitle = remember(activeEditionKey) {
+        PRESET_GAME_EDITIONS.find { it.key == activeEditionKey }?.title ?: "PUBG MOBILE"
+    }
 
     // Notification permission launcher for Android 13+
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -214,6 +236,7 @@ fun WormCopierApp(
                                     AppDestination.HOME -> appStrings.navHome
                                     AppDestination.FILES -> appStrings.navFiles
                                     AppDestination.PATHS -> appStrings.navPaths
+                                    AppDestination.CONTENT -> appStrings.navContentCenter
                                     AppDestination.AUTO_DELETE -> appStrings.navAutoDelete
                                     AppDestination.HISTORY -> appStrings.navHistory
                                     AppDestination.SETTINGS -> appStrings.navSettings
@@ -322,6 +345,15 @@ fun WormCopierApp(
                                     onDeletePath = viewModel::deleteSavedPath
                                 )
 
+                                AppDestination.CONTENT -> ContentCenterScreen(
+                                    contentItems = contentItems,
+                                    currentEditionKey = activeEditionKey,
+                                    activeEditionTitle = activeEditionTitle,
+                                    downloadingItemId = downloadingItemId,
+                                    downloadProgress = downloadProgress,
+                                    onUseContentItem = viewModel::useContentItem
+                                )
+
                                 AppDestination.AUTO_DELETE -> com.example.ui.screens.AutoDeleteScreen(
                                     settings = settings,
                                     scheduledList = scheduledDeletions,
@@ -417,6 +449,13 @@ fun WormCopierApp(
 
                 // Animated Opening Splash Screen
                 SplashScreenOverlay(visible = showSplash)
+
+                // First Launch Telegram Welcome Gate Dialog
+                if (!telegramGateCompleted && !showSplash) {
+                    TelegramGateDialog(
+                        onContinue = viewModel::completeTelegramGate
+                    )
+                }
             }
         }
     }

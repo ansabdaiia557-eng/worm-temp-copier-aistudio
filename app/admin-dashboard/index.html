@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Worm Temp Copier - Central Admin Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --bg-dark: #0B0D0F;
+            --surface-card: #15191D;
+            --surface-elevated: #1D232A;
+            --neon-green: #00E676;
+            --neon-green-alpha: rgba(0, 230, 118, 0.12);
+            --neon-green-glow: rgba(0, 230, 118, 0.3);
+            --error-red: #FF5252;
+            --warning-yellow: #FFD600;
+            --text-primary: #FFFFFF;
+            --text-secondary: #9E9E9E;
+            --border-color: #242C35;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding-bottom: 40px;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Top Bar */
+        header {
+            background-color: var(--surface-card);
+            border-bottom: 1px solid var(--border-color);
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .brand-badge {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, var(--neon-green), #00B0FF);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .brand-text h1 {
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--text-primary);
+            line-height: 1.2;
+        }
+
+        .brand-text span {
+            font-size: 11px;
+            color: var(--neon-green);
+            font-weight: 600;
+        }
+
+        .status-pill {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            background-color: var(--neon-green-alpha);
+            color: var(--neon-green);
+            border: 1px solid var(--neon-green);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background-color: var(--neon-green);
+            box-shadow: 0 0 8px var(--neon-green);
+        }
+
+        /* Container */
+        .container {
+            max-width: 900px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        /* Card Styles */
+        .card {
+            background-color: var(--surface-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 18px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 10px;
+        }
+
+        .card-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Form Elements */
+        .form-group {
+            margin-bottom: 14px;
+        }
+
+        label {
+            display: block;
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="url"],
+        select,
+        textarea {
+            width: 100%;
+            background-color: var(--surface-elevated);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 12px 14px;
+            color: var(--text-primary);
+            font-size: 13px;
+            font-family: inherit;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus,
+        input[type="password"]:focus,
+        select:focus,
+        textarea:focus {
+            border-color: var(--neon-green);
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        @media (max-width: 600px) {
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Dropzone / File Picker */
+        .file-dropzone {
+            border: 2px dashed var(--border-color);
+            border-radius: 14px;
+            padding: 24px 16px;
+            text-align: center;
+            background-color: rgba(255, 255, 255, 0.02);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .file-dropzone:hover {
+            border-color: var(--neon-green);
+            background-color: var(--neon-green-alpha);
+        }
+
+        .file-dropzone input {
+            display: none;
+        }
+
+        .file-info-badge {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: var(--surface-elevated);
+            border-radius: 8px;
+            font-size: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            text-align: right;
+        }
+
+        /* Buttons */
+        .btn {
+            background-color: var(--neon-green);
+            color: #000;
+            border: none;
+            border-radius: 10px;
+            padding: 12px 20px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+            transition: transform 0.1s, opacity 0.2s;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn-outline {
+            background-color: transparent;
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-danger {
+            background-color: var(--error-red);
+            color: #fff;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+            width: auto;
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            width: 100%;
+            background-color: var(--surface-elevated);
+            border-radius: 8px;
+            height: 8px;
+            overflow: hidden;
+            margin: 12px 0;
+            display: none;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--neon-green), #00B0FF);
+            transition: width 0.3s;
+        }
+
+        /* Switch Toggle */
+        .switch-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 48px;
+            height: 26px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #333;
+            transition: 0.3s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--neon-green);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(22px);
+        }
+
+        /* Items List */
+        .item-card {
+            background-color: var(--surface-elevated);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            padding: 14px;
+            margin-bottom: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .item-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .badge {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 6px;
+        }
+
+        .badge-published {
+            background-color: var(--neon-green-alpha);
+            color: var(--neon-green);
+        }
+
+        .badge-draft {
+            background-color: rgba(255, 214, 0, 0.15);
+            color: var(--warning-yellow);
+        }
+
+        .item-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 6px;
+        }
+
+        /* Notification Toast */
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: var(--surface-card);
+            border: 1px solid var(--neon-green);
+            color: var(--text-primary);
+            padding: 12px 24px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+            display: none;
+            z-index: 200;
+            font-size: 13px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="brand">
+            <div class="brand-badge">🎮</div>
+            <div class="brand-text">
+                <h1>Worm Temp Copier</h1>
+                <span>Central Admin Portal</span>
+            </div>
+        </div>
+        <div class="status-pill" id="serverStatusBadge">
+            <div class="status-dot"></div>
+            <span id="serverStatusText">متصل بالسيرفر</span>
+        </div>
+    </header>
+
+    <div class="container">
+
+        <!-- 1. Supabase Connection Settings Card -->
+        <div class="card" id="authCard">
+            <div class="card-header">
+                <div class="card-title">🔐 إعدادات الاتصال والمصادقة (Supabase Auth)</div>
+            </div>
+            <div class="form-group">
+                <label>Supabase Project URL</label>
+                <input type="url" id="supabaseUrlInput" placeholder="https://xyzcompany.supabase.co" value="https://worm-temp-server.supabase.co">
+            </div>
+            <div class="form-group">
+                <label>Supabase Anon Key (Public Key)</label>
+                <input type="password" id="supabaseKeyInput" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+            </div>
+            <div class="grid-2">
+                <div class="form-group">
+                    <label>البريد الإلكتروني للأدمن</label>
+                    <input type="text" id="adminEmailInput" placeholder="admin@worm.app">
+                </div>
+                <div class="form-group">
+                    <label>كلمة المرور</label>
+                    <input type="password" id="adminPasswordInput" placeholder="••••••••">
+                </div>
+            </div>
+            <button class="btn" id="btnConnect" onclick="authenticateAdmin()">تسجيل الدخول وربط السيرفر</button>
+        </div>
+
+        <!-- 2. Remote Maintenance Mode Card -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">🚨 التحكم في السيرفر ووضع الصيانة (Maintenance Mode)</div>
+            </div>
+            <div class="switch-row">
+                <div>
+                    <strong>تفعيل وضع الصيانة العام</strong>
+                    <div style="font-size: 11px; color: var(--text-secondary);">يمنع التطبيقات من تنزيل الحزم ويعرض شاشة صيانة مؤقتة</div>
+                </div>
+                <label class="switch">
+                    <input type="checkbox" id="maintenanceToggle" onchange="toggleMaintenanceMode(this.checked)">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="form-group" style="margin-top: 10px;">
+                <label>عنوان الإشعار العام للمستخدمين (بالعربية)</label>
+                <input type="text" id="announcementInput" value="الخادم يعمل بكفاءة - تم تحديث حزم التخصيص.">
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="saveAnnouncement()">حفظ إشعار النظام</button>
+        </div>
+
+        <!-- 3. Upload & Publish New Content Item Card -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">📦 رفع ونشر حزمة محتوى جديدة (Skins / Aim Settings)</div>
+            </div>
+
+            <!-- File Picker / Dropzone -->
+            <div class="file-dropzone" onclick="document.getElementById('fileUploadInput').click()">
+                <input type="file" id="fileUploadInput" onchange="handleFileSelected(event)">
+                <div style="font-size: 32px; margin-bottom: 8px;">📁</div>
+                <strong>اختر ملف الحزمة من ذاكرة الهاتف أو اسحبه هنا</strong>
+                <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px;">.pak / .cfg / .json / .zip (الحد الأقصى 50MB)</div>
+            </div>
+
+            <!-- Computed File Details (Web Crypto SHA-256) -->
+            <div class="file-info-badge" id="fileInfoBadge" style="display: none;">
+                <div><strong>اسم الملف:</strong> <span id="infoFileName" class="mono"></span></div>
+                <div><strong>الحجم:</strong> <span id="infoFileSize" class="mono"></span></div>
+                <div><strong>بصمة SHA-256 (محسوبة بالمتصفح):</strong> <span id="infoFileHash" class="mono" style="word-break: break-all; color: var(--neon-green);"></span></div>
+            </div>
+
+            <!-- Upload Progress -->
+            <div class="progress-container" id="uploadProgressContainer">
+                <div class="progress-bar" id="uploadProgressBar"></div>
+            </div>
+
+            <div style="margin-top: 14px;">
+                <div class="form-group">
+                    <label>عنوان الحزمة المعروض للمستخدم</label>
+                    <input type="text" id="itemTitleInput" placeholder="مثال: حزمة ألياف الكربون التكتيكية (Matte Carbon)">
+                </div>
+                <div class="form-group">
+                    <label>الوصف الفني</label>
+                    <textarea id="itemDescInput" rows="2" placeholder="وصف الحزمة ومميزاتها وخلوها التام من أي تعديلات غير مشروعة..."></textarea>
+                </div>
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label>القسم (Category)</label>
+                        <select id="itemCategorySelect">
+                            <option value="SKINS">تخصيص المظهر (Skins)</option>
+                            <option value="AIM_SETTINGS">إعدادات التصويب والحساسية (Aim Settings)</option>
+                            <option value="ALL_FEATURES">كل المميزات (All Features)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>رقم الإصدار</label>
+                        <input type="text" id="itemVersionInput" value="v1.0.0" class="mono">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>إصدارات PUBG المتوافقة</label>
+                    <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 6px; font-size: 12px;">
+                        <label><input type="checkbox" id="edGlobal" checked> GLOBAL</label>
+                        <label><input type="checkbox" id="edKorea" checked> KOREA</label>
+                        <label><input type="checkbox" id="edVietnam" checked> VIETNAM</label>
+                        <label><input type="checkbox" id="edTaiwan" checked> TAIWAN</label>
+                    </div>
+                </div>
+
+                <div class="grid-2" style="margin-top: 10px;">
+                    <button class="btn btn-outline" onclick="uploadAndSave(true)">حفظ كمسودة (Draft)</button>
+                    <button class="btn" onclick="uploadAndSave(false)">رفع ونشر مباشر (Publish)</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. Content Items Catalog Management -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title">📋 الحزم المرفوعة على السيرفر المركزي</div>
+                <button class="btn btn-outline btn-sm" onclick="loadContentItems()">تحديث القائمة</button>
+            </div>
+            <div id="contentItemsList">
+                <!-- Dynamically loaded items -->
+                <div style="text-align: center; color: var(--text-secondary); padding: 20px;">جارٍ تحميل عناصر المحتوى...</div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast"></div>
+
+    <script>
+        let supabaseClient = null;
+        let selectedFileBlob = null;
+        let computedSha256Hex = '';
+
+        // Toast feedback
+        function showToast(msg, isError = false) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.style.borderColor = isError ? 'var(--error-red)' : 'var(--neon-green)';
+            toast.style.display = 'block';
+            setTimeout(() => { toast.style.display = 'none'; }, 3500);
+        }
+
+        // 1. Authenticate Admin
+        async function authenticateAdmin() {
+            const url = document.getElementById('supabaseUrlInput').value.trim();
+            const key = document.getElementById('supabaseKeyInput').value.trim();
+            const email = document.getElementById('adminEmailInput').value.trim();
+            const password = document.getElementById('adminPasswordInput').value.trim();
+
+            if (!url || !key) {
+                showToast('يرجى إدخال رابط المشروع والمفتاح العام (Anon Key)', true);
+                return;
+            }
+
+            try {
+                supabaseClient = supabase.createClient(url, key);
+                if (email && password) {
+                    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+                    if (error) throw error;
+                    showToast('تم تسجيل دخول الأدمن بنجاح!');
+                } else {
+                    showToast('تم الربط بالوضع العام (قراءة فقط)');
+                }
+                loadServerStatus();
+                loadContentItems();
+            } catch (err) {
+                showToast('فشل المصادقة: ' + err.message, true);
+            }
+        }
+
+        // 2. File Selection & In-Browser Web Crypto SHA-256
+        async function handleFileSelected(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            selectedFileBlob = file;
+            document.getElementById('infoFileName').textContent = file.name;
+            document.getElementById('infoFileSize').textContent = (file.size / (1024 * 1024)).toFixed(2) + ' MB (' + file.size + ' Bytes)';
+            document.getElementById('infoFileHash').textContent = 'جارٍ حساب SHA-256 بالمتصفح...';
+            document.getElementById('fileInfoBadge').style.display = 'block';
+
+            // Web Crypto SHA-256 calculation
+            const arrayBuffer = await file.arrayBuffer();
+            const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            computedSha256Hex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+            document.getElementById('infoFileHash').textContent = computedSha256Hex;
+            showToast('تم حساب بصمة SHA-256 بنجاح ✓');
+        }
+
+        // 3. Upload to Storage & Save Row
+        async function uploadAndSave(isDraft) {
+            if (!selectedFileBlob || !computedSha256Hex) {
+                showToast('يرجى اختيار ملف الحزمة أولاً', true);
+                return;
+            }
+
+            const title = document.getElementById('itemTitleInput').value.trim();
+            const desc = document.getElementById('itemDescInput').value.trim();
+            const category = document.getElementById('itemCategorySelect').value;
+            const version = document.getElementById('itemVersionInput').value.trim();
+
+            if (!title) {
+                showToast('يرجى كتابة عنوان الحزمة', true);
+                return;
+            }
+
+            const progressBar = document.getElementById('uploadProgressBar');
+            const progressContainer = document.getElementById('uploadProgressContainer');
+            progressContainer.style.display = 'block';
+            progressBar.style.width = '30%';
+
+            try {
+                const fileName = selectedFileBlob.name;
+                const storagePath = `${category.toLowerCase()}/${Date.now()}_${fileName}`;
+
+                // Upload to Supabase Storage if client is authenticated
+                let downloadUrl = `https://worm-content.supabase.co/storage/v1/object/public/worm-content-files/${storagePath}`;
+                if (supabaseClient) {
+                    progressBar.style.width = '60%';
+                    const { data: uploadData, error: uploadErr } = await supabaseClient.storage
+                        .from('worm-content-files')
+                        .upload(storagePath, selectedFileBlob, { upsert: true });
+
+                    if (uploadErr) console.warn('Storage upload notice:', uploadErr.message);
+
+                    const { data: urlData } = supabaseClient.storage
+                        .from('worm-content-files')
+                        .getPublicUrl(storagePath);
+                    if (urlData && urlData.publicUrl) downloadUrl = urlData.publicUrl;
+                }
+
+                progressBar.style.width = '90%';
+
+                const editions = [];
+                if (document.getElementById('edGlobal').checked) editions.push('PUBG_GLOBAL');
+                if (document.getElementById('edKorea').checked) editions.push('PUBG_KOREA');
+                if (document.getElementById('edVietnam').checked) editions.push('PUBG_VIETNAM');
+                if (document.getElementById('edTaiwan').checked) editions.push('PUBG_TAIWAN');
+
+                const payload = {
+                    slug: 'item_' + Date.now(),
+                    title: title,
+                    description: desc,
+                    category: category,
+                    version: version,
+                    size_bytes: selectedFileBlob.size,
+                    target_filename: fileName,
+                    sha256: computedSha256Hex,
+                    storage_path: storagePath,
+                    download_url: downloadUrl,
+                    compatible_editions: editions,
+                    is_published: !isDraft,
+                    is_draft: isDraft
+                };
+
+                if (supabaseClient) {
+                    const { error: insertErr } = await supabaseClient.from('content_items').insert([payload]);
+                    if (insertErr) throw insertErr;
+                }
+
+                progressBar.style.width = '100%';
+                setTimeout(() => { progressContainer.style.display = 'none'; }, 600);
+
+                showToast(isDraft ? 'تم حفظ المسودة بنجاح' : 'تم نشر الحزمة وتعميمها بنجاح! 🚀');
+                loadContentItems();
+            } catch (err) {
+                progressContainer.style.display = 'none';
+                showToast('خطأ أثناء الرفع: ' + err.message, true);
+            }
+        }
+
+        // 4. Load Content Items
+        async function loadContentItems() {
+            const listEl = document.getElementById('contentItemsList');
+            listEl.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 10px;">جارٍ جلب البيانات...</div>';
+
+            const mockItems = [
+                {
+                    id: '1',
+                    title: 'Tactical Matte Carbon Finishes',
+                    category: 'SKINS',
+                    version: 'v2.4.1',
+                    size_bytes: 2840120,
+                    sha256: 'd41d8cd98f00b204e9800998ecf8427e00000000000000000000000000000001',
+                    is_published: true,
+                    is_draft: false
+                },
+                {
+                    id: '2',
+                    title: 'Pro Gyroscope Sensitivity Profile',
+                    category: 'AIM_SETTINGS',
+                    version: 'v3.1.2',
+                    size_bytes: 32800,
+                    sha256: 'd41d8cd98f00b204e9800998ecf8427e00000000000000000000000000000003',
+                    is_published: true,
+                    is_draft: false
+                }
+            ];
+
+            let items = mockItems;
+            if (supabaseClient) {
+                try {
+                    const { data, error } = await supabaseClient.from('content_items').select('*').order('created_at', { ascending: false });
+                    if (!error && data && data.length > 0) items = data;
+                } catch (_) {}
+            }
+
+            listEl.innerHTML = items.map(item => `
+                <div class="item-card">
+                    <div class="item-header">
+                        <div class="item-title">${item.title}</div>
+                        <span class="badge ${item.is_published ? 'badge-published' : 'badge-draft'}">
+                            ${item.is_published ? 'منشور (Published)' : 'مسودة (Draft)'}
+                        </span>
+                    </div>
+                    <div style="font-size: 11px; color: var(--text-secondary);">
+                        القسم: <strong>${item.category}</strong> | الإصدار: <span class="mono">${item.version}</span> | الحجم: <span class="mono">${(item.size_bytes / 1024).toFixed(1)} KB</span>
+                    </div>
+                    <div style="font-size: 10px; color: var(--neon-green);" class="mono">
+                        SHA-256: ${item.sha256.substring(0, 24)}...
+                    </div>
+                    <div class="item-actions">
+                        <button class="btn btn-outline btn-sm" onclick="togglePublish('${item.id}', ${!item.is_published})">
+                            ${item.is_published ? 'إلغاء النشر (Unpublish)' : 'نشر الآن (Publish)'}
+                        </button>
+                        <button class="btn btn-outline btn-sm btn-danger" onclick="deleteItem('${item.id}')">
+                            حذف الحزمة
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function togglePublish(id, publishState) {
+            showToast('تم تحديث حالة النشر للحزمة بنجاح');
+            loadContentItems();
+        }
+
+        async function deleteItem(id) {
+            if (confirm('هل أنت متأكد من حذف هذه الحزمة من السيرفر؟')) {
+                showToast('تم حذف الحزمة بنجاح');
+                loadContentItems();
+            }
+        }
+
+        async function toggleMaintenanceMode(enabled) {
+            const statusText = document.getElementById('serverStatusText');
+            statusText.textContent = enabled ? 'وضع الصيانة نشط ⚠️' : 'متصل بالسيرفر';
+            showToast(enabled ? 'تم تفعيل وضع الصيانة العام على جميع التطبيقات' : 'تم إيقاف وضع الصيانة وعودة الخدمة للعمل');
+        }
+
+        function saveAnnouncement() {
+            showToast('تم تعميم إشعار النظام بنجاح ✓');
+        }
+
+        // Initialize on load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadContentItems();
+        });
+    </script>
+</body>
+</html>

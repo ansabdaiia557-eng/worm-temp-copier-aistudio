@@ -30,6 +30,9 @@ import com.example.data.TransferProgressState
 import com.example.domain.FileOperationEngine
 import com.example.shizuku.ShizukuManager
 import com.example.shizuku.ShizukuStatus
+import com.example.content.ContentRepository
+import com.example.data.ContentItem
+import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -118,15 +121,70 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
     private val _bannerMessage = MutableStateFlow<Pair<String, Boolean>?>(null) // message to isError
     val bannerMessage: StateFlow<Pair<String, Boolean>?> = _bannerMessage.asStateFlow()
 
+    val contentRepository = ContentRepository(application, fileEngine)
+
+    val contentItems: StateFlow<List<ContentItem>> = contentRepository.itemsFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    val telegramGateCompleted: StateFlow<Boolean> = settingsRepository.telegramGateCompletedFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = false
+    )
+
+    private val _downloadingItemId = MutableStateFlow<String?>(null)
+    val downloadingItemId: StateFlow<String?> = _downloadingItemId.asStateFlow()
+
+    private val _downloadProgress = MutableStateFlow(0f)
+    val downloadProgress: StateFlow<Float> = _downloadProgress.asStateFlow()
+
+    fun completeTelegramGate() {
+        viewModelScope.launch {
+            settingsRepository.setTelegramGateCompleted(true)
+        }
+    }
+
+    fun useContentItem(item: ContentItem) {
+        viewModelScope.launch {
+            _downloadingItemId.value = item.id
+            _downloadProgress.value = 0f
+            val result = contentRepository.downloadOrPrepareItem(item.id) { progress ->
+                _downloadProgress.value = progress
+            }
+            _downloadingItemId.value = null
+            _downloadProgress.value = 0f
+
+            result.onSuccess { downloadedFile ->
+                val checksum = FileOperationEngine.computeSha256ForFile(downloadedFile)
+                val newItem = SelectedFileItem(
+                    id = UUID.randomUUID().toString(),
+                    name = item.targetFileName,
+                    extension = downloadedFile.extension,
+                    sizeBytes = downloadedFile.length(),
+                    lastModified = downloadedFile.lastModified(),
+                    localFilePath = downloadedFile.absolutePath,
+                    isSelected = true,
+                    computedSha256 = checksum
+                )
+                _selectedFiles.update { current ->
+                    listOf(newItem) + current.filter { it.name != newItem.name }
+                }
+                showBanner("تم تجهيز \"${item.title}\" بنجاح وإضافته إلى قائمة النسخ!", isError = false)
+            }.onFailure { err ->
+                showBanner("فشل تجهيز ملف المحتوى: ${err.message}", isError = true)
+            }
+        }
+    }
+
     private var activeTransferJob: Job? = null
 
     init {
         shizukuManager.registerListeners()
         viewModelScope.launch {
             seedDefaultPathsIfEmpty()
-            // Populate initial sample test files so user can immediately inspect & test
-            val sampleFiles = fileEngine.createSampleTestFiles()
-            _selectedFiles.value = sampleFiles
             refreshGameEditionStatuses()
         }
     }
@@ -651,6 +709,8 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
                             uniqueCopyId = copyId,
                             fileName = item.name,
                             destinationPath = targetPath,
+                            destinationTreeUri = destTreeUri,
+                            targetFileUri = itemResult.targetFileUri,
                             fileSize = item.sizeBytes,
                             expectedSha256 = itemResult.targetHash ?: itemResult.originalHash,
                             gameEditionName = PRESET_GAME_EDITIONS.find { it.key.name == currentSettings.selectedGameEdition }?.title ?: "PUBG MOBILE",
@@ -907,7 +967,9 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
             com.example.autodelete.AutoDeleteWorker.cancelScheduledWork(getApplication(), entity.uniqueCopyId)
             val (success, reason) = fileEngine.safeDeleteTemporaryCopy(
                 targetFilePath = entity.destinationPath,
-                expectedSha256 = entity.expectedSha256
+                expectedSha256 = entity.expectedSha256,
+                destinationTreeUri = entity.destinationTreeUri,
+                targetFileUri = entity.targetFileUri
             )
             val notifId = entity.uniqueCopyId.hashCode()
             if (success) {

@@ -10,6 +10,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Update
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -100,7 +102,7 @@ interface ScheduledDeletionDao {
         ErrorLogEntity::class,
         ScheduledDeletionEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -113,6 +115,37 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `scheduled_deletions` (
+                        `uniqueCopyId` TEXT NOT NULL,
+                        `fileName` TEXT NOT NULL,
+                        `destinationPath` TEXT NOT NULL,
+                        `fileSize` INTEGER NOT NULL,
+                        `expectedSha256` TEXT,
+                        `gameEditionName` TEXT NOT NULL,
+                        `durationMinutes` INTEGER NOT NULL,
+                        `copiedAtMillis` INTEGER NOT NULL,
+                        `deleteAtMillis` INTEGER NOT NULL,
+                        `isDeleted` INTEGER NOT NULL,
+                        `cancelled` INTEGER NOT NULL,
+                        `failureReason` TEXT,
+                        PRIMARY KEY(`uniqueCopyId`)
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `scheduled_deletions` ADD COLUMN `destinationTreeUri` TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE `scheduled_deletions` ADD COLUMN `targetFileUri` TEXT DEFAULT NULL")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -120,7 +153,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "worm_temp_copier.db"
                 )
-                    .fallbackToDestructiveMigration(true)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build()
                 INSTANCE = instance
                 instance

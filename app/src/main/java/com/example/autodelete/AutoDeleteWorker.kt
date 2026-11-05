@@ -34,7 +34,9 @@ class AutoDeleteWorker(
 
         val (success, failureReason) = engine.safeDeleteTemporaryCopy(
             targetFilePath = record.destinationPath,
-            expectedSha256 = record.expectedSha256
+            expectedSha256 = record.expectedSha256,
+            destinationTreeUri = record.destinationTreeUri,
+            targetFileUri = record.targetFileUri
         )
 
         val notificationId = uniqueCopyId.hashCode()

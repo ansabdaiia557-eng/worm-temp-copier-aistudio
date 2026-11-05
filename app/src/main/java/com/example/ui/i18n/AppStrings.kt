@@ -12,6 +12,7 @@ data class AppStrings(
     val navFiles: String,
     val navPaths: String,
     val navAutoDelete: String,
+    val navContentCenter: String,
     val navHistory: String,
     val navSettings: String,
     // Shizuku Card
@@ -161,7 +162,28 @@ data class AppStrings(
     val settingDarkModeDesc: String,
     val settingsAboutSection: String,
     val btnResetSettings: String,
-    val resetSettingsConfirmMsg: String
+    val resetSettingsConfirmMsg: String,
+    // Telegram Gate
+    val telegramGateTitle: String,
+    val telegramGateSubtitle: String,
+    val telegramGateWelcomeMsg: String,
+    val btnJoinTelegramChannel: String,
+    val btnContinueToApp: String,
+    // Content Center
+    val contentCenterTitle: String,
+    val contentCenterSubtitle: String,
+    val tabAllFeatures: String,
+    val tabSkins: String,
+    val tabAimSettings: String,
+    val btnUseFile: String,
+    val btnDownloading: String,
+    val statusContentAvailable: String,
+    val statusContentDownloaded: String,
+    val statusContentApplied: String,
+    val incompatibleEditionNotice: (String, String) -> String,
+    val contentSha256Verified: String,
+    val contentSha256Mismatch: String,
+    val contentDisclaimerNotice: String
 )
 
 val ArabicStrings = AppStrings(
@@ -173,6 +195,7 @@ val ArabicStrings = AppStrings(
     navFiles = "الملفات",
     navPaths = "المسارات",
     navAutoDelete = "الحذف التلقائي",
+    navContentCenter = "مركز المحتوى",
     navHistory = "السجل",
     navSettings = "الإعدادات",
     shizukuStatusTitle = "حالة خدمة Shizuku",
@@ -311,7 +334,28 @@ val ArabicStrings = AppStrings(
     settingDarkModeDesc = "تفعيل الهوية البصرية السوداء #0B0D0F مع الأخضر النيون #00E676",
     settingsAboutSection = "معلومات التطبيق والإصدار",
     btnResetSettings = "إعادة ضبط الإعدادات للوضع الافتراضي",
-    resetSettingsConfirmMsg = "تمت إعادة ضبط جميع الإعدادات والمسار الافتراضي بنجاح."
+    resetSettingsConfirmMsg = "تمت إعادة ضبط جميع الإعدادات والمسار الافتراضي بنجاح.",
+    // Telegram Gate
+    telegramGateTitle = "مرحباً بك في Worm Temp Copier",
+    telegramGateSubtitle = "قناة التحديثات والدعم الرسمي",
+    telegramGateWelcomeMsg = "للحصول على أحدث ملفات التخصيص، حزم الإعدادات، والتحديثات الفنية المعتمدة أولاً بأول، انضم إلى قناتنا الرسمية على تيليجرام.",
+    btnJoinTelegramChannel = "الانضمام إلى قناة التيليجرام",
+    btnContinueToApp = "المتابعة إلى التطبيق",
+    // Content Center
+    contentCenterTitle = "مركز المحتوى المعتمد",
+    contentCenterSubtitle = "حزم تخصيص المظهر وملفات الإعدادات الرسمية المتوافقة",
+    tabAllFeatures = "كل المميزات",
+    tabSkins = "تخصيص المظهر (Skins)",
+    tabAimSettings = "إعدادات التصويب والحساسية",
+    btnUseFile = "استخدام الملف",
+    btnDownloading = "جارٍ التحميل...",
+    statusContentAvailable = "متاح للتحميل",
+    statusContentDownloaded = "تم التنزيل محلياً",
+    statusContentApplied = "مفعّل في المجلد الهدف",
+    incompatibleEditionNotice = { title, edition -> "ملف $title مخصص لنسخ محددة ولا يتوافق تماماً مع النسخة النشطة حالياً ($edition)" },
+    contentSha256Verified = "تم التحقق من سلامة البصمة (SHA-256) بنجاح ✓",
+    contentSha256Mismatch = "تحذير: بصمة الملف لا تطابق البصمة المعتمدة!",
+    contentDisclaimerNotice = "جميع الحزم المتوفرة هي إعدادات تحكم مرئية وتخصيصات مظهر مشروعة 100% ولا تحتوي على أي برمجيات ضارة أو وسائط غير قانونية."
 )
 
 val EnglishStrings = AppStrings(
@@ -323,6 +367,7 @@ val EnglishStrings = AppStrings(
     navFiles = "Files",
     navPaths = "Paths",
     navAutoDelete = "Auto Delete",
+    navContentCenter = "Content Center",
     navHistory = "History",
     navSettings = "Settings",
     shizukuStatusTitle = "Shizuku Service Status",
@@ -461,7 +506,28 @@ val EnglishStrings = AppStrings(
     settingDarkModeDesc = "Use #0B0D0F Obsidian Dark surfaces and #00E676 Neon Green accents",
     settingsAboutSection = "Application Info & Version",
     btnResetSettings = "Reset Settings to Defaults",
-    resetSettingsConfirmMsg = "All settings and default path preferences have been restored."
+    resetSettingsConfirmMsg = "All settings and default path preferences have been restored.",
+    // Telegram Gate
+    telegramGateTitle = "Welcome to Worm Temp Copier",
+    telegramGateSubtitle = "Official Updates & Support Channel",
+    telegramGateWelcomeMsg = "To receive the latest verified customization packs, control profiles, and technical updates, join our official Telegram channel.",
+    btnJoinTelegramChannel = "Join Telegram Channel",
+    btnContinueToApp = "Continue to App",
+    // Content Center
+    contentCenterTitle = "Content Center",
+    contentCenterSubtitle = "Verified appearance skins and tactical control profiles",
+    tabAllFeatures = "All Features",
+    tabSkins = "Skins & Appearance",
+    tabAimSettings = "Aim & Sensitivity",
+    btnUseFile = "Use File",
+    btnDownloading = "Downloading...",
+    statusContentAvailable = "Available",
+    statusContentDownloaded = "Downloaded",
+    statusContentApplied = "Applied to Target",
+    incompatibleEditionNotice = { title, edition -> "File '$title' is targeted for specific editions and may not match active edition ($edition)" },
+    contentSha256Verified = "SHA-256 Checksum Verified ✓",
+    contentSha256Mismatch = "Warning: SHA-256 Checksum Mismatch!",
+    contentDisclaimerNotice = "All provided packages are 100% legitimate cosmetic and sensitivity profiles. No malicious code or unauthorized modifications."
 )
 
 val LocalAppStrings = staticCompositionLocalOf { ArabicStrings }

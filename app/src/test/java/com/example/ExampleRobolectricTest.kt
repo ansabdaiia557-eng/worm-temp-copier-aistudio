@@ -104,7 +104,7 @@ class ExampleRobolectricTest {
             assertFalse("يجب إيقاف الحذف فورًا إذا لم تتطابق بصمة SHA-256", deleted)
             assertTrue(modifiedFile.exists())
             assertNotNull(err)
-            assertTrue(err!!.contains("SHA-256 mismatch", ignoreCase = true))
+            assertTrue(err!!.contains("File identity mismatch", ignoreCase = true))
         } finally {
             tempDir.deleteRecursively()
         }
@@ -215,5 +215,38 @@ class ExampleRobolectricTest {
             tempSourceDir.deleteRecursively()
             tempDestDir.deleteRecursively()
         }
+    }
+
+    @Test
+    fun contentCenter_contentCategoryAndCompatibility() {
+        val item = com.example.data.ContentItem(
+            id = "test_item_1",
+            title = "Test Carbon Skin",
+            description = "Custom tactical weapon texture",
+            category = com.example.data.ContentCategory.SKINS,
+            version = "v1.0.0",
+            sizeBytes = 2048L,
+            updatedAt = "2026-11-05",
+            targetFileName = "test_skin.pak",
+            sha256 = "d41d8cd98f00b204e9800998ecf8427e00000000000000000000000000000001",
+            downloadUrl = "https://example.com/test_skin.pak",
+            compatibleEditions = listOf(GameEditionKey.PUBG_GLOBAL, GameEditionKey.PUBG_KOREA)
+        )
+
+        assertEquals(com.example.data.ContentCategory.SKINS, item.category)
+        assertTrue(item.compatibleEditions.contains(GameEditionKey.PUBG_GLOBAL))
+        assertTrue(item.compatibleEditions.contains(GameEditionKey.PUBG_KOREA))
+        assertFalse(item.compatibleEditions.contains(GameEditionKey.PUBG_FLASH))
+    }
+
+    @Test
+    fun roomMigrations_verifyMigrationDefinitions() {
+        val m12 = com.example.data.AppDatabase.MIGRATION_1_2
+        assertEquals(1, m12.startVersion)
+        assertEquals(2, m12.endVersion)
+
+        val m23 = com.example.data.AppDatabase.MIGRATION_2_3
+        assertEquals(2, m23.startVersion)
+        assertEquals(3, m23.endVersion)
     }
 }

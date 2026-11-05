@@ -26,6 +26,11 @@ val WarningOrangeSurface = Color(0xFF2C1E0B)
 val ErrorRed = Color(0xFFFF5252)           // لون الأخطاء: أحمر
 val ErrorRedSurface = Color(0xFF2D1215)
 
+// Aliases for Dark Gaming Theme
+val ObsidianCard = CarbonCard
+val ObsidianStroke = CarbonBorder
+val WarningYellow = WarningOrange
+
 // Light fallback colors if user toggles Dark Mode off in Settings
 val LightBackground = Color(0xFFF2F5F7)
 val LightCard = Color(0xFFFFFFFF)

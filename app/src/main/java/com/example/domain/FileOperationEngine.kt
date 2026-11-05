@@ -291,47 +291,154 @@ class FileOperationEngine(
      */
     suspend fun safeDeleteTemporaryCopy(
         targetFilePath: String,
-        expectedSha256: String?
+        expectedSha256: String?,
+        destinationTreeUri: String? = null,
+        targetFileUri: String? = null
     ): Pair<Boolean, String?> = withContext(Dispatchers.IO) {
         val target = File(targetFilePath)
+        val isRestricted = isRestrictedAndroidDataPath(targetFilePath)
 
-        // 1. If accessible directly
+        // Case A: Restricted Android/data or Android/obb path (such as PUBG / Saved / Paks / puffer_temp)
+        if (isRestricted) {
+            // Priority 1: Shizuku elevated operations
+            val shizukuStatus = shizukuManager.refreshStatus()
+            if (shizukuStatus.isReadyForElevatedOps) {
+                val exists = shizukuManager.fileExistsViaShizuku(targetFilePath)
+                if (!exists) {
+                    return@withContext true to null // Target copy already removed
+                }
+
+                if (!expectedSha256.isNullOrBlank()) {
+                    val currentHash = shizukuManager.computeSha256ViaShizuku(targetFilePath)
+                    if (currentHash != null && !currentHash.equals(expectedSha256, ignoreCase = true)) {
+                        return@withContext false to "File identity mismatch: SHA-256 altered since copy!"
+                    }
+                }
+
+                val res = shizukuManager.deleteFileViaShizuku(targetFilePath)
+                return@withContext if (res.isSuccess) {
+                    true to null
+                } else {
+                    false to (res.stderr.ifBlank { "Shizuku rm failed with code ${res.exitCode}" })
+                }
+            }
+
+            // Priority 2: SAF DocumentFile deletion if tree URI or direct file URI is granted
+            val safResult = tryDeleteViaSaf(
+                targetFilePath = targetFilePath,
+                expectedSha256 = expectedSha256,
+                destinationTreeUri = destinationTreeUri,
+                targetFileUri = targetFileUri
+            )
+            if (safResult != null) {
+                return@withContext safResult
+            }
+
+            // Provide clear, actionable diagnostic reason when neither Shizuku nor SAF is ready
+            val failureDetail = when {
+                !shizukuStatus.isInstalled ->
+                    "Shizuku permission unavailable: Shizuku is not installed and SAF permission is missing for restricted Android/data path."
+                !shizukuStatus.isBinderAlive ->
+                    "Shizuku permission unavailable: Shizuku service is not running."
+                !shizukuStatus.isPermissionGranted ->
+                    "Shizuku permission unavailable: Shizuku permission not granted by user."
+                else ->
+                    "Permission denied: Restricted Android/data path requires active Shizuku or valid SAF URI permission."
+            }
+            return@withContext false to failureDetail
+        }
+
+        // Case B: Non-restricted paths (standard external storage, app private storage, or public folders)
+        // If created via SAF, try SAF deletion first
+        if (!targetFileUri.isNullOrBlank() || !destinationTreeUri.isNullOrBlank()) {
+            val safResult = tryDeleteViaSaf(
+                targetFilePath = targetFilePath,
+                expectedSha256 = expectedSha256,
+                destinationTreeUri = destinationTreeUri,
+                targetFileUri = targetFileUri
+            )
+            if (safResult != null && safResult.first) {
+                return@withContext safResult
+            }
+        }
+
+        // Standard direct file deletion
         if (target.exists() && target.isFile) {
             return@withContext safeDeleteDirectFile(target, expectedSha256)
         }
 
-        // 2. If in restricted Android/data path, use Shizuku
-        if (isRestrictedAndroidDataPath(targetFilePath)) {
-            val status = shizukuManager.refreshStatus()
-            if (!status.isReadyForElevatedOps) {
-                return@withContext false to "Shizuku service/permission required to delete from Android/data"
-            }
-
-            val exists = shizukuManager.fileExistsViaShizuku(targetFilePath)
-            if (!exists) {
-                return@withContext true to null // already gone
-            }
-
-            if (!expectedSha256.isNullOrBlank()) {
-                val currentHash = shizukuManager.computeSha256ViaShizuku(targetFilePath)
-                if (currentHash != null && currentHash != expectedSha256) {
-                    return@withContext false to "Target file SHA-256 changed or was modified since copy."
-                }
-            }
-
-            val res = shizukuManager.deleteFileViaShizuku(targetFilePath)
-            return@withContext if (res.isSuccess) {
-                true to null
-            } else {
-                false to (res.stderr.ifBlank { "Shizuku rm failed with code ${res.exitCode}" })
-            }
-        }
-
         if (!target.exists()) {
-            return@withContext true to null
+            return@withContext true to null // File already gone
         }
 
-        false to "Target file not found or inaccessible"
+        false to "File not found or inaccessible"
+    }
+
+    private suspend fun tryDeleteViaSaf(
+        targetFilePath: String,
+        expectedSha256: String?,
+        destinationTreeUri: String?,
+        targetFileUri: String?
+    ): Pair<Boolean, String?>? {
+        val fileName = targetFilePath.substringAfterLast('/')
+
+        // 1. Try direct DocumentFile URI if provided
+        if (!targetFileUri.isNullOrBlank()) {
+            try {
+                val fileUri = Uri.parse(targetFileUri)
+                val doc = DocumentFile.fromSingleUri(context, fileUri)
+                if (doc != null && doc.exists()) {
+                    if (!expectedSha256.isNullOrBlank()) {
+                        val currentHash = context.contentResolver.openInputStream(fileUri)?.use {
+                            computeSha256FromStream(it)
+                        }
+                        if (currentHash != null && !currentHash.equals(expectedSha256, ignoreCase = true)) {
+                            return false to "File identity mismatch: SHA-256 altered since copy!"
+                        }
+                    }
+                    val deleted = doc.delete()
+                    if (deleted) return true to null
+                }
+            } catch (_: Throwable) {
+            }
+        }
+
+        // 2. Try destination tree URI or persisted tree permissions
+        val treeUriStr = destinationTreeUri ?: getMatchingPersistedTreeUri(targetFilePath)
+        if (!treeUriStr.isNullOrBlank()) {
+            try {
+                val treeUri = Uri.parse(treeUriStr)
+                val treeDoc = DocumentFile.fromTreeUri(context, treeUri)
+                if (treeDoc != null && treeDoc.exists() && treeDoc.canWrite()) {
+                    val fileDoc = treeDoc.findFile(fileName)
+                    if (fileDoc != null && fileDoc.exists()) {
+                        if (!expectedSha256.isNullOrBlank()) {
+                            val currentHash = context.contentResolver.openInputStream(fileDoc.uri)?.use {
+                                computeSha256FromStream(it)
+                            }
+                            if (currentHash != null && !currentHash.equals(expectedSha256, ignoreCase = true)) {
+                                return false to "File identity mismatch: SHA-256 altered since copy!"
+                            }
+                        }
+                        val deleted = fileDoc.delete()
+                        if (deleted) return true to null
+                    }
+                }
+            } catch (_: Throwable) {
+            }
+        }
+
+        return null
+    }
+
+    private fun getMatchingPersistedTreeUri(targetFilePath: String): String? {
+        return try {
+            val permissions = context.contentResolver.persistedUriPermissions
+            val active = permissions.firstOrNull { it.isWritePermission } ?: return null
+            active.uri.toString()
+        } catch (_: Throwable) {
+            null
+        }
     }
 
     fun isRestrictedAndroidDataPath(path: String): Boolean {
@@ -588,7 +695,8 @@ class FileOperationEngine(
                         targetHash = targetHash,
                         message = "${operationType.name} completed via SAF",
                         uniqueCopyId = uniqueCopyId,
-                        targetFullPath = targetFullPath
+                        targetFullPath = targetFullPath,
+                        targetFileUri = targetDoc.uri.toString()
                     ) to false
                 } catch (t: Throwable) {
                     targetDoc.delete()
@@ -889,14 +997,14 @@ class FileOperationEngine(
             if (!expectedSha256.isNullOrBlank()) {
                 val currentHash = computeSha256ForFile(target)
                 if (currentHash != null && currentHash != expectedSha256) {
-                    return false to "SHA-256 mismatch: File was modified or replaced after copy!"
+                    return false to "File identity mismatch: File was modified or replaced after copy!"
                 }
             }
             val deleted = target.delete()
             return if (deleted) {
                 true to null
             } else {
-                false to "Could not delete file from filesystem (Permission Denied)"
+                false to "Permission denied: Could not delete file from filesystem"
             }
         }
     }
