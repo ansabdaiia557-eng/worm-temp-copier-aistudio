@@ -249,4 +249,26 @@ class ExampleRobolectricTest {
         assertEquals(2, m23.startVersion)
         assertEquals(3, m23.endVersion)
     }
+
+    @Test
+    fun contentItem_storagePathAndSecurityFields_verified() {
+        val item = com.example.data.ContentItem(
+            id = "test_item_sec",
+            title = "Tactical Carbon",
+            description = "High performance texture",
+            category = com.example.data.ContentCategory.SKINS,
+            version = "v2.0.0",
+            sizeBytes = 1048576L,
+            updatedAt = "2026-11-06",
+            targetFileName = "tactical_carbon.pak",
+            sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            storagePath = "skins/tactical_carbon.pak",
+            downloadUrl = "" // Can be empty when private signed URLs are used
+        )
+
+        assertEquals("skins/tactical_carbon.pak", item.storagePath)
+        assertEquals("", item.downloadUrl)
+        assertFalse(item.isDraft)
+        assertFalse(item.isDownloaded)
+    }
 }

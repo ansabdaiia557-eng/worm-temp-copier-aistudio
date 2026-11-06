@@ -32,6 +32,7 @@ class ContentRepository(
             updatedAt = "2026-11-01",
             targetFileName = "skin_tactical_matte_pack.pak",
             sha256 = "d41d8cd98f00b204e9800998ecf8427e00000000000000000000000000000001",
+            storagePath = "skins/skin_tactical_matte_pack.pak",
             downloadUrl = "https://worm-content.supabase.co/storage/v1/object/public/worm-content-files/skin_tactical_matte_pack.pak",
             compatibleEditions = listOf(
                 GameEditionKey.PUBG_GLOBAL,
@@ -50,6 +51,7 @@ class ContentRepository(
             updatedAt = "2026-11-03",
             targetFileName = "skin_neon_cyberpunk.pak",
             sha256 = "d41d8cd98f00b204e9800998ecf8427e00000000000000000000000000000002",
+            storagePath = "skins/skin_neon_cyberpunk.pak",
             downloadUrl = "https://worm-content.supabase.co/storage/v1/object/public/worm-content-files/skin_neon_cyberpunk.pak",
             compatibleEditions = listOf(
                 GameEditionKey.PUBG_GLOBAL,
@@ -67,6 +69,7 @@ class ContentRepository(
             updatedAt = "2026-11-04",
             targetFileName = "UserCustomDeviceProfile_gyro.cfg",
             sha256 = "d41d8cd98f00b204e9800998ecf8427e00000000000000000000000000000003",
+            storagePath = "aim_settings/UserCustomDeviceProfile_gyro.cfg",
             downloadUrl = "https://worm-content.supabase.co/storage/v1/object/public/worm-content-files/UserCustomDeviceProfile_gyro.cfg",
             compatibleEditions = listOf(
                 GameEditionKey.PUBG_GLOBAL,
@@ -86,6 +89,7 @@ class ContentRepository(
             updatedAt = "2026-11-02",
             targetFileName = "UserCustomDeviceProfile_touch.cfg",
             sha256 = "d41d8cd98f00b204e9800998ecf8427e00000000000000000000000000000004",
+            storagePath = "aim_settings/UserCustomDeviceProfile_touch.cfg",
             downloadUrl = "https://worm-content.supabase.co/storage/v1/object/public/worm-content-files/UserCustomDeviceProfile_touch.cfg",
             compatibleEditions = listOf(
                 GameEditionKey.PUBG_GLOBAL,

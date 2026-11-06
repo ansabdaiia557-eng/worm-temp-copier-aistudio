@@ -443,6 +443,9 @@
                     <input type="password" id="adminPasswordInput" placeholder="••••••••">
                 </div>
             </div>
+            <div style="background: rgba(0, 230, 118, 0.08); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 11px; color: var(--text-secondary); line-height: 1.6;">
+                🛡️ <strong>تأمين الصلاحيات (Security Note):</strong> يتم التحقق من صفة المشرف حصرياً عبر <code class="mono" style="color: var(--neon-green);">app_metadata.role = 'admin'</code> من خلال قاعدة البيانات. لا تقم أبداً بإدخال <code class="mono">service_role</code> في المتصفح. استخدم المفتاح العام (Anon Key) فقط مع بريدك المعتمد كمشرف.
+            </div>
             <button class="btn" id="btnConnect" onclick="authenticateAdmin()">تسجيل الدخول وربط السيرفر</button>
         </div>
 
@@ -641,20 +644,23 @@
                 const fileName = selectedFileBlob.name;
                 const storagePath = `${category.toLowerCase()}/${Date.now()}_${fileName}`;
 
-                // Upload to Supabase Storage if client is authenticated
-                let downloadUrl = `https://worm-content.supabase.co/storage/v1/object/public/worm-content-files/${storagePath}`;
+                // Upload to Supabase Private Storage if client is authenticated
+                let signedUrlForPreview = null;
                 if (supabaseClient) {
                     progressBar.style.width = '60%';
                     const { data: uploadData, error: uploadErr } = await supabaseClient.storage
                         .from('worm-content-files')
                         .upload(storagePath, selectedFileBlob, { upsert: true });
 
-                    if (uploadErr) console.warn('Storage upload notice:', uploadErr.message);
+                    if (uploadErr) throw new Error('فشل الرفع لمستودع التخزين: ' + uploadErr.message);
 
-                    const { data: urlData } = supabaseClient.storage
+                    // Generate a temporary 1-hour signed URL for immediate administrative preview
+                    const { data: signedData } = await supabaseClient.storage
                         .from('worm-content-files')
-                        .getPublicUrl(storagePath);
-                    if (urlData && urlData.publicUrl) downloadUrl = urlData.publicUrl;
+                        .createSignedUrl(storagePath, 3600);
+                    if (signedData && signedData.signedUrl) {
+                        signedUrlForPreview = signedData.signedUrl;
+                    }
                 }
 
                 progressBar.style.width = '90%';
@@ -675,7 +681,7 @@
                     target_filename: fileName,
                     sha256: computedSha256Hex,
                     storage_path: storagePath,
-                    download_url: downloadUrl,
+                    download_url: signedUrlForPreview, // Temporary Signed URL or null; client retrieves signed URLs via Edge Function
                     compatible_editions: editions,
                     is_published: !isDraft,
                     is_draft: isDraft
@@ -710,6 +716,7 @@
                     version: 'v2.4.1',
                     size_bytes: 2840120,
                     sha256: 'd41d8cd98f00b204e9800998ecf8427e00000000000000000000000000000001',
+                    storage_path: 'skins/skin_tactical_matte_pack.pak',
                     is_published: true,
                     is_draft: false
                 },
@@ -720,6 +727,7 @@
                     version: 'v3.1.2',
                     size_bytes: 32800,
                     sha256: 'd41d8cd98f00b204e9800998ecf8427e00000000000000000000000000000003',
+                    storage_path: 'aim_settings/UserCustomDeviceProfile_gyro.cfg',
                     is_published: true,
                     is_draft: false
                 }
@@ -745,13 +753,19 @@
                         القسم: <strong>${item.category}</strong> | الإصدار: <span class="mono">${item.version}</span> | الحجم: <span class="mono">${(item.size_bytes / 1024).toFixed(1)} KB</span>
                     </div>
                     <div style="font-size: 10px; color: var(--neon-green);" class="mono">
-                        SHA-256: ${item.sha256.substring(0, 24)}...
+                        SHA-256: ${item.sha256 ? item.sha256.substring(0, 24) : ''}...
+                    </div>
+                    <div style="font-size: 10px; color: var(--text-secondary);" class="mono">
+                        المسار الخاص: ${item.storage_path || 'غير محدد'}
                     </div>
                     <div class="item-actions">
                         <button class="btn btn-outline btn-sm" onclick="togglePublish('${item.id}', ${!item.is_published})">
                             ${item.is_published ? 'إلغاء النشر (Unpublish)' : 'نشر الآن (Publish)'}
                         </button>
-                        <button class="btn btn-outline btn-sm btn-danger" onclick="deleteItem('${item.id}')">
+                        <button class="btn btn-outline btn-sm" onclick="openSignedUrl('${item.storage_path}')">
+                            🔗 رابط موقّع (Signed URL)
+                        </button>
+                        <button class="btn btn-outline btn-sm btn-danger" onclick="deleteItem('${item.id}', '${item.storage_path}')">
                             حذف الحزمة
                         </button>
                     </div>
@@ -759,25 +773,102 @@
             `).join('');
         }
 
+        async function openSignedUrl(storagePath) {
+            if (!storagePath) {
+                showToast('لا يوجد مسار تخزين للملف', true);
+                return;
+            }
+            if (supabaseClient) {
+                const { data, error } = await supabaseClient.storage
+                    .from('worm-content-files')
+                    .createSignedUrl(storagePath, 3600);
+                if (error || !data?.signedUrl) {
+                    showToast('تعذر توليد رابط موقّع: ' + (error?.message || 'يتطلب حساب أدمن'), true);
+                    return;
+                }
+                window.open(data.signedUrl, '_blank');
+                showToast('تم فتح الرابط الموقّع بنجاح (صالح لمدة 60 دقيقة) ✓');
+            } else {
+                showToast('سجل الدخول بحساب المشرف لاختبار الروابط الموقّعة', true);
+            }
+        }
+
         async function togglePublish(id, publishState) {
-            showToast('تم تحديث حالة النشر للحزمة بنجاح');
+            if (supabaseClient) {
+                const { error } = await supabaseClient
+                    .from('content_items')
+                    .update({ is_published: publishState, is_draft: !publishState })
+                    .eq('id', id);
+                if (error) {
+                    showToast('فشل التعديل: ' + error.message, true);
+                    return;
+                }
+            }
+            showToast(publishState ? 'تم نشر الحزمة وتفعيلها بنجاح' : 'تم إلغاء النشر وتحويلها لمسودة');
             loadContentItems();
         }
 
-        async function deleteItem(id) {
-            if (confirm('هل أنت متأكد من حذف هذه الحزمة من السيرفر؟')) {
+        async function deleteItem(id, storagePath) {
+            if (confirm('هل أنت متأكد من حذف هذه الحزمة والملف نهائياً من السيرفر؟')) {
+                if (supabaseClient) {
+                    if (storagePath) {
+                        await supabaseClient.storage.from('worm-content-files').remove([storagePath]);
+                    }
+                    const { error } = await supabaseClient.from('content_items').delete().eq('id', id);
+                    if (error) {
+                        showToast('فشل حذف السجل: ' + error.message, true);
+                        return;
+                    }
+                }
                 showToast('تم حذف الحزمة بنجاح');
                 loadContentItems();
             }
         }
 
+        async function loadServerStatus() {
+            if (!supabaseClient) return;
+            try {
+                const { data } = await supabaseClient.from('system_status').select('*').limit(1);
+                if (data && data[0]) {
+                    const status = data[0];
+                    document.getElementById('maintenanceToggle').checked = status.maintenance_mode;
+                    if (status.announcement_body_ar) {
+                        document.getElementById('announcementInput').value = status.announcement_body_ar;
+                    }
+                    const statusText = document.getElementById('serverStatusText');
+                    statusText.textContent = status.maintenance_mode ? 'وضع الصيانة نشط ⚠️' : 'متصل بالسيرفر';
+                }
+            } catch (_) {}
+        }
+
         async function toggleMaintenanceMode(enabled) {
             const statusText = document.getElementById('serverStatusText');
             statusText.textContent = enabled ? 'وضع الصيانة نشط ⚠️' : 'متصل بالسيرفر';
+            if (supabaseClient) {
+                const { error } = await supabaseClient
+                    .from('system_status')
+                    .update({ maintenance_mode: enabled })
+                    .eq('id', '00000000-0000-0000-0000-000000000001');
+                if (error) {
+                    showToast('فشل تحديث وضع الصيانة: ' + error.message, true);
+                    return;
+                }
+            }
             showToast(enabled ? 'تم تفعيل وضع الصيانة العام على جميع التطبيقات' : 'تم إيقاف وضع الصيانة وعودة الخدمة للعمل');
         }
 
-        function saveAnnouncement() {
+        async function saveAnnouncement() {
+            const msg = document.getElementById('announcementInput').value.trim();
+            if (supabaseClient) {
+                const { error } = await supabaseClient
+                    .from('system_status')
+                    .update({ announcement_body_ar: msg, updated_at: new Date().toISOString() })
+                    .eq('id', '00000000-0000-0000-0000-000000000001');
+                if (error) {
+                    showToast('فشل حفظ الإشعار: ' + error.message, true);
+                    return;
+                }
+            }
             showToast('تم تعميم إشعار النظام بنجاح ✓');
         }
 

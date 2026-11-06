@@ -218,7 +218,8 @@ data class ContentItem(
     val updatedAt: String,
     val targetFileName: String,
     val sha256: String,
-    val downloadUrl: String,
+    val downloadUrl: String = "",
+    val storagePath: String? = null,
     val compatibleEditions: List<GameEditionKey> = listOf(
         GameEditionKey.PUBG_GLOBAL,
         GameEditionKey.PUBG_KOREA,
