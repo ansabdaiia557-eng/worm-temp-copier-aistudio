@@ -248,6 +248,10 @@ class ExampleRobolectricTest {
         val m23 = com.example.data.AppDatabase.MIGRATION_2_3
         assertEquals(2, m23.startVersion)
         assertEquals(3, m23.endVersion)
+
+        val m34 = com.example.data.AppDatabase.MIGRATION_3_4
+        assertEquals(3, m34.startVersion)
+        assertEquals(4, m34.endVersion)
     }
 
     @Test
@@ -270,5 +274,86 @@ class ExampleRobolectricTest {
         assertEquals("", item.downloadUrl)
         assertFalse(item.isDraft)
         assertFalse(item.isDownloaded)
+    }
+
+    @Test
+    fun autoDelete_safeDeleteDirectFile_abortsIfFileSizeMismatch() {
+        val tempDir = File(System.getProperty("java.io.tmpdir") ?: "/tmp", "test_size_mismatch_${System.currentTimeMillis()}").apply { mkdirs() }
+        try {
+            val file = File(tempDir, "size_test.pak").apply {
+                writeBytes("ACTUAL_PAYLOAD_LENGTH_24".toByteArray(Charsets.UTF_8))
+            }
+            val hash = FileOperationEngine.computeSha256ForFile(file)
+            val (deleted, err) = FileOperationEngine.safeDeleteDirectFile(
+                target = file,
+                expectedSha256 = hash,
+                expectedFileSize = 99999L
+            )
+            assertFalse("يجب إيقاف الحذف فورًا إذا لم يتطابق حجم الملف", deleted)
+            assertTrue(file.exists())
+            assertNotNull(err)
+            assertTrue(err!!.contains("File size mismatch", ignoreCase = true))
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun autoDelete_safeDeleteDirectFile_abortsIfTimestampPredatesCopy() {
+        val tempDir = File(System.getProperty("java.io.tmpdir") ?: "/tmp", "test_time_mismatch_${System.currentTimeMillis()}").apply { mkdirs() }
+        try {
+            val file = File(tempDir, "old_file.pak").apply {
+                writeBytes("PREEXISTING_ORIGINAL_FILE".toByteArray(Charsets.UTF_8))
+            }
+            val oldTime = System.currentTimeMillis() - 3600000L
+            file.setLastModified(oldTime)
+
+            val hash = FileOperationEngine.computeSha256ForFile(file)
+            val copyTime = System.currentTimeMillis()
+            val (deleted, err) = FileOperationEngine.safeDeleteDirectFile(
+                target = file,
+                expectedSha256 = hash,
+                expectedFileSize = file.length(),
+                copiedAtMillis = copyTime
+            )
+            assertFalse("يجب إيقاف الحذف إذا كان الملف أقدم من وقت إنشاء النسخة لمنع حذف ملفات أصلية سابقة", deleted)
+            assertTrue(file.exists())
+            assertNotNull(err)
+            assertTrue(err!!.contains("File ownership mismatch", ignoreCase = true))
+        } finally {
+            tempDir.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun autoDelete_safeDeleteDirectFile_abortsIfProtectedSystemPath() {
+        assertTrue(FileOperationEngine.isForbiddenDeletionPath("/system/bin/sh"))
+        assertTrue(FileOperationEngine.isForbiddenDeletionPath("/vendor/etc/hosts"))
+        assertTrue(FileOperationEngine.isForbiddenDeletionPath("/storage/emulated/0"))
+        assertFalse(FileOperationEngine.isForbiddenDeletionPath("/storage/emulated/0/Download/test.pak"))
+    }
+
+    @Test
+    fun autoDelete_multiFactorOwnership_succeedsWhenAllFactorsMatch() {
+        val tempDir = File(System.getProperty("java.io.tmpdir") ?: "/tmp", "test_mf_success_${System.currentTimeMillis()}").apply { mkdirs() }
+        try {
+            val copyTime = System.currentTimeMillis() - 1000L
+            val targetFile = File(tempDir, "verified_copy.pak").apply {
+                writeBytes("VERIFIED_APPLICATION_COPY_PAYLOAD".toByteArray(Charsets.UTF_8))
+            }
+            val hash = FileOperationEngine.computeSha256ForFile(targetFile)
+
+            val (deleted, err) = FileOperationEngine.safeDeleteDirectFile(
+                target = targetFile,
+                expectedSha256 = hash,
+                expectedFileSize = targetFile.length(),
+                copiedAtMillis = copyTime
+            )
+            assertTrue("يجب أن ينجح الحذف عند تطابق جميع عوامل إثبات الملكية", deleted)
+            assertEquals(null, err)
+            assertFalse(targetFile.exists())
+        } finally {
+            tempDir.deleteRecursively()
+        }
     }
 }

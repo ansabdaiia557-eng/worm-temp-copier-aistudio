@@ -32,9 +32,17 @@ import com.example.shizuku.ShizukuManager
 import com.example.shizuku.ShizukuStatus
 import com.example.content.ContentRepository
 import com.example.data.ContentItem
+import com.example.server.AuthSessionState
+import com.example.server.PubgCopyInstallState
+import com.example.server.PubgInstallOrchestrator
+import com.example.server.ServerGateStatus
+import com.example.server.SessionStore
+import com.example.server.SupabaseClient
+import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -42,6 +50,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 data class PendingTransferConfirmation(
@@ -121,7 +130,43 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
     private val _bannerMessage = MutableStateFlow<Pair<String, Boolean>?>(null) // message to isError
     val bannerMessage: StateFlow<Pair<String, Boolean>?> = _bannerMessage.asStateFlow()
 
-    val contentRepository = ContentRepository(application, fileEngine)
+    val sessionStore = SessionStore(application)
+    val supabaseClient = SupabaseClient(application, sessionStore)
+    val contentRepository = ContentRepository(application, supabaseClient, sessionStore)
+    private val pubgOrchestrator = PubgInstallOrchestrator(
+        context = application,
+        supabaseClient = supabaseClient,
+        sessionStore = sessionStore,
+        contentRepository = contentRepository,
+        fileEngine = fileEngine,
+        shizukuManager = shizukuManager
+    )
+
+    val authSession: StateFlow<AuthSessionState> = sessionStore.sessionFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = AuthSessionState()
+    )
+
+    private val _serverGateStatus = MutableStateFlow(
+        ServerGateStatus(isConfigured = supabaseClient.isConfigured())
+    )
+    val serverGateStatus: StateFlow<ServerGateStatus> = _serverGateStatus.asStateFlow()
+
+    private val _pubgInstallState = MutableStateFlow(PubgCopyInstallState())
+    val pubgInstallState: StateFlow<PubgCopyInstallState> = _pubgInstallState.asStateFlow()
+
+    private val _isGateChecking = MutableStateFlow(false)
+    val isGateChecking: StateFlow<Boolean> = _isGateChecking.asStateFlow()
+
+    private val _isAuthBusy = MutableStateFlow(false)
+    val isAuthBusy: StateFlow<Boolean> = _isAuthBusy.asStateFlow()
+
+    private val _showAccountSheet = MutableStateFlow(false)
+    val showAccountSheet: StateFlow<Boolean> = _showAccountSheet.asStateFlow()
+
+    private val _dismissedOptionalUpdateCode = MutableStateFlow(0)
+    val dismissedOptionalUpdateCode: StateFlow<Int> = _dismissedOptionalUpdateCode.asStateFlow()
 
     val contentItems: StateFlow<List<ContentItem>> = contentRepository.itemsFlow.stateIn(
         scope = viewModelScope,
@@ -147,7 +192,190 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    fun openAccountSheet() {
+        _showAccountSheet.value = true
+    }
+
+    fun closeAccountSheet() {
+        _showAccountSheet.value = false
+    }
+
+    fun dismissOptionalAppUpdate(versionCode: Int) {
+        _dismissedOptionalUpdateCode.value = versionCode
+    }
+
+    fun refreshServerGate(silent: Boolean = false) {
+        viewModelScope.launch {
+            if (!silent) _isGateChecking.value = true
+            val installedMap = sessionStore.getInstalledFiles()
+            val gate = supabaseClient.fetchServerGateStatus(installedMap)
+            _serverGateStatus.value = gate
+            if (gate.isReachable) {
+                contentRepository.syncCatalogFromServer(gate)
+                if (gate.telegram.verified && !telegramGateCompleted.value) {
+                    settingsRepository.setTelegramGateCompleted(true)
+                }
+                if (gate.outdatedFileIds.isNotEmpty() || !gate.canExecuteCopy) {
+                    _pubgInstallState.update { it.copy(canLaunchPubg = false) }
+                }
+            }
+            if (!silent) _isGateChecking.value = false
+        }
+    }
+
+    fun signIn(email: String, password: String) {
+        viewModelScope.launch {
+            _isAuthBusy.value = true
+            val res = supabaseClient.signInWithEmail(email, password)
+            _isAuthBusy.value = false
+            res.onSuccess {
+                refreshServerGate(silent = false)
+                showBanner(
+                    if (settings.value.languageCode == "ar") "تم تسجيل الدخول بنجاح" else "Signed in successfully",
+                    isError = false
+                )
+            }.onFailure { err ->
+                showBanner(err.localizedMessage ?: "Sign in failed", isError = true)
+            }
+        }
+    }
+
+    fun signUp(email: String, password: String, displayName: String) {
+        viewModelScope.launch {
+            _isAuthBusy.value = true
+            val res = supabaseClient.signUpWithEmail(email, password, displayName)
+            _isAuthBusy.value = false
+            res.onSuccess {
+                refreshServerGate(silent = false)
+                showBanner(
+                    if (settings.value.languageCode == "ar") "تم إنشاء الحساب وتسجيل الدخول" else "Account created & signed in",
+                    isError = false
+                )
+            }.onFailure { err ->
+                showBanner(err.localizedMessage ?: "Sign up failed", isError = true)
+            }
+        }
+    }
+
+    fun signOut() {
+        viewModelScope.launch {
+            _isAuthBusy.value = true
+            supabaseClient.signOut()
+            sessionStore.clearPubgInstallVerified()
+            _pubgInstallState.value = PubgCopyInstallState()
+            _isAuthBusy.value = false
+            refreshServerGate(silent = false)
+            showBanner(
+                if (settings.value.languageCode == "ar") "تم تسجيل الخروج" else "Signed out",
+                isError = false
+            )
+        }
+    }
+
+    fun redeemActivationCode(code: String) {
+        viewModelScope.launch {
+            _isAuthBusy.value = true
+            val res = supabaseClient.redeemActivationCode(code)
+            _isAuthBusy.value = false
+            if (res.success) {
+                refreshServerGate(silent = false)
+                showBanner(res.message, isError = false)
+            } else {
+                showBanner(res.message, isError = true)
+            }
+        }
+    }
+
+    fun verifyTelegramMembership(telegramUserId: String) {
+        viewModelScope.launch {
+            _isAuthBusy.value = true
+            val res = supabaseClient.verifyTelegramMembership(telegramUserId)
+            _isAuthBusy.value = false
+            if (res.isMember) {
+                settingsRepository.setTelegramGateCompleted(true)
+                refreshServerGate(silent = false)
+                showBanner(
+                    if (settings.value.languageCode == "ar") {
+                        "تم التحقق من عضوية القناة بنجاح ✓"
+                    } else {
+                        "Telegram channel membership verified ✓"
+                    },
+                    isError = false
+                )
+            } else {
+                showBanner(res.message, isError = true)
+            }
+        }
+    }
+
+    fun startServerPubgInstall(specificItems: List<ContentItem>? = null) {
+        if (_pubgInstallState.value.isRunning) return
+        viewModelScope.launch {
+            val currentSettings = settingsRepository.settingsFlow.first()
+            val result = pubgOrchestrator.runTenStepAutoInstall(
+                settings = currentSettings,
+                specificItems = specificItems
+            ) { state ->
+                _pubgInstallState.value = state
+            }
+            result.onSuccess { res ->
+                _serverGateStatus.value = res.gateStatus
+                if (currentSettings.keepHistory) {
+                    res.historyEntries.forEach { historyDao.insertHistory(it) }
+                }
+                showBanner(res.message, isError = false)
+            }.onFailure { err ->
+                val msg = err.localizedMessage ?: "PUBG installation failed"
+                logError("PUBG_SERVER_INSTALL", msg, currentSettings.selectedGameEdition)
+                triggerFailureVibrationIfEnabled(currentSettings.vibrateOnFailure)
+                showBanner(msg, isError = true)
+                refreshServerGate(silent = true)
+            }
+        }
+    }
+
+    fun launchPubg() {
+        val gate = _serverGateStatus.value
+        val installState = _pubgInstallState.value
+        val isAr = settings.value.languageCode == "ar"
+
+        if (!installState.canLaunchPubg) {
+            showBanner(
+                if (isAr) "يرجى إتمام التثبيت التلقائي والتحقق من الملفات أولاً"
+                else "Complete verified server file installation first",
+                isError = true
+            )
+            return
+        }
+        if (gate.isConfigured && gate.isReachable && !gate.canExecuteCopy) {
+            val reason = if (isAr) gate.blockReasonAr else gate.blockReasonEn
+            showBanner(reason ?: "Server gate blocked launch", isError = true)
+            return
+        }
+
+        val editionKey = try {
+            com.example.data.GameEditionKey.valueOf(settings.value.selectedGameEdition)
+        } catch (_: Throwable) {
+            com.example.data.GameEditionKey.PUBG_GLOBAL
+        }
+        val edition = PRESET_GAME_EDITIONS.find { it.key == editionKey } ?: PRESET_GAME_EDITIONS.first()
+        pubgOrchestrator.launchPubgPackage(edition.packageName).onFailure { err ->
+            showBanner(err.localizedMessage ?: "Cannot launch PUBG", isError = true)
+        }
+    }
+
     fun useContentItem(item: ContentItem) {
+        val gate = _serverGateStatus.value
+        val isAr = settings.value.languageCode == "ar"
+        if (gate.isConfigured && gate.isReachable && !gate.canExecuteCopy && gate.outdatedFileIds.none { it == item.id }) {
+            val reason = if (isAr) gate.blockReasonAr else gate.blockReasonEn
+            if (gate.user == null || (gate.subscription.required && !gate.subscription.isActive)) {
+                _showAccountSheet.value = true
+            }
+            showBanner(reason ?: "Server authorization required", isError = true)
+            return
+        }
+
         viewModelScope.launch {
             _downloadingItemId.value = item.id
             _downloadProgress.value = 0f
@@ -172,9 +400,17 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
                 _selectedFiles.update { current ->
                     listOf(newItem) + current.filter { it.name != newItem.name }
                 }
-                showBanner("تم تجهيز \"${item.title}\" بنجاح وإضافته إلى قائمة النسخ!", isError = false)
+                showBanner(
+                    if (isAr) "تم تنزيل والتحقق من \"${item.title}\" وإضافته لقائمة النسخ!"
+                    else "Downloaded & verified \"${item.title}\" into transfer queue!",
+                    isError = false
+                )
             }.onFailure { err ->
-                showBanner("فشل تجهيز ملف المحتوى: ${err.message}", isError = true)
+                showBanner(
+                    if (isAr) "فشل تنزيل ملف المحتوى: ${err.message}"
+                    else "Content download failed: ${err.message}",
+                    isError = true
+                )
             }
         }
     }
@@ -186,6 +422,17 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             seedDefaultPathsIfEmpty()
             refreshGameEditionStatuses()
+            refreshServerGate(silent = true)
+        }
+        // Poll server gate every 18s while maintenance is active so Instant Resume unlocks automatically
+        viewModelScope.launch {
+            while (isActive) {
+                delay(18_000L)
+                val gate = _serverGateStatus.value
+                if (gate.isConfigured && gate.maintenance.isActive) {
+                    refreshServerGate(silent = true)
+                }
+            }
         }
     }
 
@@ -705,6 +952,12 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
                         val delayMillis = retentionMinutes * 60 * 1000L
                         val deleteAt = now + delayMillis
 
+                        val targetCanonical = try {
+                            File(targetPath).canonicalPath
+                        } catch (_: Throwable) {
+                            targetPath
+                        }
+
                         val scheduledEntity = ScheduledDeletionEntity(
                             uniqueCopyId = copyId,
                             fileName = item.name,
@@ -718,7 +971,8 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
                             copiedAtMillis = now,
                             deleteAtMillis = deleteAt,
                             isDeleted = false,
-                            cancelled = false
+                            cancelled = false,
+                            canonicalPath = targetCanonical
                         )
                         scheduledDeletionDao.insert(scheduledEntity)
                         com.example.autodelete.AutoDeleteWorker.scheduleDeletion(
@@ -914,6 +1168,7 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             settingsRepository.setSelectedGameEdition(edition.key.name)
             settingsRepository.setActiveDestination(edition.defaultPufferPath, null)
+            _pubgInstallState.update { it.copy(canLaunchPubg = false) }
             saveOrUpdateRecentPath(
                 name = edition.title,
                 path = edition.defaultPufferPath,
@@ -965,12 +1220,7 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
     fun deleteScheduledCopyNow(entity: com.example.data.ScheduledDeletionEntity) {
         viewModelScope.launch {
             com.example.autodelete.AutoDeleteWorker.cancelScheduledWork(getApplication(), entity.uniqueCopyId)
-            val (success, reason) = fileEngine.safeDeleteTemporaryCopy(
-                targetFilePath = entity.destinationPath,
-                expectedSha256 = entity.expectedSha256,
-                destinationTreeUri = entity.destinationTreeUri,
-                targetFileUri = entity.targetFileUri
-            )
+            val (success, reason) = fileEngine.safeDeleteTemporaryCopy(entity)
             val notifId = entity.uniqueCopyId.hashCode()
             if (success) {
                 scheduledDeletionDao.markDeleted(entity.uniqueCopyId)

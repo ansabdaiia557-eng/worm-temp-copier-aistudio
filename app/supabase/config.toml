@@ -1,0 +1,22 @@
+project_id = "nqwmahahhichwmnxccrg"
+
+[functions.server-gate-status]
+verify_jwt = false
+
+[functions.redeem-activation-code]
+verify_jwt = false
+
+[functions.get-download-url]
+verify_jwt = false
+
+[functions.verify-telegram-membership]
+verify_jwt = false
+
+[functions.admin-control]
+verify_jwt = false
+
+[functions.app-update-check]
+verify_jwt = false
+
+[functions.record-operation-audit]
+verify_jwt = false

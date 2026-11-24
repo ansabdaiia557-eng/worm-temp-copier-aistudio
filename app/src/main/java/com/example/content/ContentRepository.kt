@@ -5,180 +5,197 @@ import com.example.data.ContentCategory
 import com.example.data.ContentItem
 import com.example.data.GameEditionKey
 import com.example.domain.FileOperationEngine
+import com.example.server.InstalledServerFileMeta
+import com.example.server.ServerContentFileDto
+import com.example.server.ServerGateStatus
+import com.example.server.SessionStore
+import com.example.server.SupabaseClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.FileOutputStream
-import java.security.MessageDigest
+import java.util.Locale
 
 class ContentRepository(
     private val context: Context,
-    private val fileEngine: FileOperationEngine
+    private val supabaseClient: SupabaseClient,
+    private val sessionStore: SessionStore
 ) {
-    private val contentCacheDir = File(context.filesDir, "content_cache").apply { mkdirs() }
-
-    // Initial verified catalog of legitimate skin presets and aim sensitivity profiles
-    private val defaultContentItems = listOf(
-        ContentItem(
-            id = "skin_tactical_matte",
-            title = "Tactical Matte Carbon Finishes",
-            description = "High-definition custom matte carbon weapon & gear texture pack optimized for low-end devices.",
-            category = ContentCategory.SKINS,
-            version = "v2.4.1",
-            sizeBytes = 2840120L, // ~2.7 MB
-            updatedAt = "2026-11-01",
-            targetFileName = "skin_tactical_matte_pack.pak",
-            sha256 = "d41d8cd98f00b204e9800998ecf8427e00000000000000000000000000000001",
-            storagePath = "skins/skin_tactical_matte_pack.pak",
-            downloadUrl = "https://worm-content.supabase.co/storage/v1/object/public/worm-content-files/skin_tactical_matte_pack.pak",
-            compatibleEditions = listOf(
-                GameEditionKey.PUBG_GLOBAL,
-                GameEditionKey.PUBG_KOREA,
-                GameEditionKey.PUBG_VIETNAM,
-                GameEditionKey.PUBG_TAIWAN
-            )
-        ),
-        ContentItem(
-            id = "skin_neon_cyberpunk",
-            title = "Cyberpunk Vibrant Glow Textures",
-            description = "Enhanced contrast vehicle and weapon skin shaders with vibrant neon highlights for competitive visibility.",
-            category = ContentCategory.SKINS,
-            version = "v1.8.0",
-            sizeBytes = 4120900L, // ~3.9 MB
-            updatedAt = "2026-11-03",
-            targetFileName = "skin_neon_cyberpunk.pak",
-            sha256 = "d41d8cd98f00b204e9800998ecf8427e00000000000000000000000000000002",
-            storagePath = "skins/skin_neon_cyberpunk.pak",
-            downloadUrl = "https://worm-content.supabase.co/storage/v1/object/public/worm-content-files/skin_neon_cyberpunk.pak",
-            compatibleEditions = listOf(
-                GameEditionKey.PUBG_GLOBAL,
-                GameEditionKey.PUBG_KOREA,
-                GameEditionKey.PUBG_VIETNAM
-            )
-        ),
-        ContentItem(
-            id = "aim_pro_gyro_sens",
-            title = "Pro Gyroscope Sensitivity Profile",
-            description = "Fine-tuned linear ADS gyro response curves for 3x, 4x, and 6x scopes used by esports tournament finalists.",
-            category = ContentCategory.AIM_SETTINGS,
-            version = "v3.1.2",
-            sizeBytes = 32800L, // ~32 KB
-            updatedAt = "2026-11-04",
-            targetFileName = "UserCustomDeviceProfile_gyro.cfg",
-            sha256 = "d41d8cd98f00b204e9800998ecf8427e00000000000000000000000000000003",
-            storagePath = "aim_settings/UserCustomDeviceProfile_gyro.cfg",
-            downloadUrl = "https://worm-content.supabase.co/storage/v1/object/public/worm-content-files/UserCustomDeviceProfile_gyro.cfg",
-            compatibleEditions = listOf(
-                GameEditionKey.PUBG_GLOBAL,
-                GameEditionKey.PUBG_KOREA,
-                GameEditionKey.PUBG_VIETNAM,
-                GameEditionKey.PUBG_TAIWAN,
-                GameEditionKey.PUBG_FLASH
-            )
-        ),
-        ContentItem(
-            id = "aim_zero_delay_touch",
-            title = "Ultra-Low Latency Touch Calibration",
-            description = "Calibrated touch sampling matrix minimizing input lag and smoothing micro-adjustments for close-quarters duels.",
-            category = ContentCategory.AIM_SETTINGS,
-            version = "v2.0.5",
-            sizeBytes = 18400L, // ~18 KB
-            updatedAt = "2026-11-02",
-            targetFileName = "UserCustomDeviceProfile_touch.cfg",
-            sha256 = "d41d8cd98f00b204e9800998ecf8427e00000000000000000000000000000004",
-            storagePath = "aim_settings/UserCustomDeviceProfile_touch.cfg",
-            downloadUrl = "https://worm-content.supabase.co/storage/v1/object/public/worm-content-files/UserCustomDeviceProfile_touch.cfg",
-            compatibleEditions = listOf(
-                GameEditionKey.PUBG_GLOBAL,
-                GameEditionKey.PUBG_KOREA,
-                GameEditionKey.PUBG_VIETNAM,
-                GameEditionKey.PUBG_TAIWAN
-            )
-        )
-    )
+    private val contentCacheDir = File(context.filesDir, "ans_server_cache").apply { mkdirs() }
 
     private val _itemsFlow = MutableStateFlow<List<ContentItem>>(emptyList())
     val itemsFlow: Flow<List<ContentItem>> = _itemsFlow.asStateFlow()
 
-    init {
-        loadCatalog()
+    suspend fun syncCatalogFromServer(gateStatus: ServerGateStatus) = withContext(Dispatchers.IO) {
+        val installedMap = sessionStore.getInstalledFiles()
+        val outdatedSet = gateStatus.outdatedFileIds.toSet()
+
+        val mapped = gateStatus.files.map { dto ->
+            mapDtoToContentItem(dto, installedMap[dto.id], outdatedSet)
+        }
+        _itemsFlow.value = mapped
     }
 
-    private fun loadCatalog() {
-        val updated = defaultContentItems.map { item ->
-            val cachedFile = File(contentCacheDir, item.targetFileName)
-            if (cachedFile.exists() && cachedFile.length() > 0) {
-                item.copy(
-                    isDownloaded = true,
-                    localFilePath = cachedFile.absolutePath,
-                    sizeBytes = cachedFile.length()
-                )
-            } else {
-                item
-            }
+    suspend fun refreshLocalCacheState() = withContext(Dispatchers.IO) {
+        val installedMap = sessionStore.getInstalledFiles()
+        _itemsFlow.value = _itemsFlow.value.map { item ->
+            val meta = installedMap[item.id]
+            val localFile = meta?.localCachePath?.let { File(it) }
+            val hasFile = localFile != null && localFile.exists() && localFile.length() > 0L
+            val isLatest = hasFile &&
+                meta != null &&
+                meta.versionCode >= item.versionCode &&
+                (item.sha256.isBlank() || meta.sha256.equals(item.sha256, ignoreCase = true))
+
+            item.copy(
+                isDownloaded = hasFile && isLatest,
+                localFilePath = if (hasFile) localFile.absolutePath else null,
+                installedVersionCode = meta?.versionCode ?: 0,
+                needsUpdate = !isLatest && (meta != null || item.isRequired)
+            )
         }
-        _itemsFlow.value = updated
     }
 
     suspend fun downloadOrPrepareItem(
         itemId: String,
         onProgress: (Float) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
+        val item = _itemsFlow.value.find { it.id == itemId }
+            ?: return@withContext Result.failure(IllegalArgumentException("Server content item not found: $itemId"))
+
+        downloadVerifiedItem(item, onProgress)
+    }
+
+    suspend fun downloadVerifiedItem(
+        item: ContentItem,
+        onProgress: (Float) -> Unit
+    ): Result<File> = withContext(Dispatchers.IO) {
         try {
-            val item = _itemsFlow.value.find { it.id == itemId }
-                ?: return@withContext Result.failure(IllegalArgumentException("Content item not found: $itemId"))
+            val safeFilename = sanitizeFilename(item.targetFileName.ifBlank { "${item.id}.pak" })
+            val destinationFile = File(contentCacheDir, "${item.id}_$safeFilename")
+            val installedMeta = sessionStore.getInstalledFiles()[item.id]
 
-            val targetFile = File(contentCacheDir, item.targetFileName)
-            
-            // If already cached and valid, return it
-            if (targetFile.exists() && targetFile.length() > 0) {
-                onProgress(1f)
-                return@withContext Result.success(targetFile)
+            // Reuse verified cached copy ONLY if version_code AND sha256 both match server record
+            if (destinationFile.exists() &&
+                destinationFile.length() > 0L &&
+                installedMeta != null &&
+                installedMeta.versionCode >= item.versionCode &&
+                !item.needsUpdate
+            ) {
+                val actualHash = FileOperationEngine.computeSha256ForFile(destinationFile)
+                val sizeOk = item.sizeBytes <= 0L || destinationFile.length() == item.sizeBytes
+                val hashOk = item.sha256.isBlank() || (actualHash != null && actualHash.equals(item.sha256, ignoreCase = true))
+                if (sizeOk && hashOk) {
+                    onProgress(1f)
+                    return@withContext Result.success(destinationFile)
+                }
             }
 
-            // Emulate secure download payload generation if network unavailable
-            onProgress(0.2f)
-            val dummyBytes = generateVerifiedPayload(item)
-            onProgress(0.6f)
-
-            FileOutputStream(targetFile).use { out ->
-                out.write(dummyBytes)
+            // Request fresh 1-hour signed download URL from Edge Function
+            onProgress(0.05f)
+            val signedResult = supabaseClient.requestSignedDownloadUrl(item.id)
+            val payload = signedResult.getOrElse { err ->
+                return@withContext Result.failure(err)
             }
-            onProgress(1.0f)
 
-            // Calculate actual SHA-256 of generated/downloaded file
-            val digest = MessageDigest.getInstance("SHA-256")
-            val computedHash = digest.digest(targetFile.readBytes()).joinToString("") { "%02x".format(it) }
+            val dlResult = supabaseClient.downloadAndVerifyBinary(
+                signedUrl = payload.signedUrl,
+                destinationFile = destinationFile,
+                expectedSha256 = payload.sha256.ifBlank { item.sha256 },
+                expectedSizeBytes = if (payload.sizeBytes > 0L) payload.sizeBytes else item.sizeBytes,
+                onProgress = onProgress
+            )
 
-            // Update item in flow
-            _itemsFlow.value = _itemsFlow.value.map {
-                if (it.id == itemId) {
-                    it.copy(
+            val verifiedSha = dlResult.getOrElse { err ->
+                return@withContext Result.failure(err)
+            }
+
+            val updatedMeta = InstalledServerFileMeta(
+                contentId = item.id,
+                versionCode = payload.versionCode,
+                versionName = payload.version,
+                sha256 = verifiedSha,
+                localCachePath = destinationFile.absolutePath,
+                installedDestPath = installedMeta?.installedDestPath ?: "",
+                installedAtMillis = System.currentTimeMillis(),
+                sizeBytes = destinationFile.length()
+            )
+            sessionStore.saveInstalledFile(updatedMeta)
+
+            _itemsFlow.value = _itemsFlow.value.map { current ->
+                if (current.id == item.id) {
+                    current.copy(
                         isDownloaded = true,
-                        localFilePath = targetFile.absolutePath,
-                        sizeBytes = targetFile.length(),
-                        sha256 = computedHash
+                        localFilePath = destinationFile.absolutePath,
+                        sizeBytes = destinationFile.length(),
+                        sha256 = verifiedSha,
+                        versionCode = payload.versionCode,
+                        version = payload.version,
+                        installedVersionCode = payload.versionCode,
+                        needsUpdate = false
                     )
-                } else it
+                } else current
             }
 
-            Result.success(targetFile)
-        } catch (e: Exception) {
-            Result.failure(e)
+            Result.success(destinationFile)
+        } catch (t: Throwable) {
+            Result.failure(t)
         }
     }
 
-    private fun generateVerifiedPayload(item: ContentItem): ByteArray {
-        val header = when (item.category) {
-            ContentCategory.SKINS -> "/* WORM_SKIN_PAK_v2.4 [Legitimate Custom Texture Asset] */\n"
-            ContentCategory.AIM_SETTINGS -> "[UserCustomDeviceProfile_AimOptimization]\n+CVars=TouchFilterRate=0.005\n+CVars=GyroLinearDamping=0.12\n"
-            ContentCategory.ALL_FEATURES -> "/* WORM_LEGITIMATE_TACTICAL_ASSET */\n"
+    private fun mapDtoToContentItem(
+        dto: ServerContentFileDto,
+        installed: InstalledServerFileMeta?,
+        outdatedIds: Set<String>
+    ): ContentItem {
+        val category = when (dto.category.uppercase(Locale.ROOT)) {
+            "SKINS" -> ContentCategory.SKINS
+            "AIM_SETTINGS" -> ContentCategory.AIM_SETTINGS
+            else -> ContentCategory.ALL_FEATURES
         }
-        val padding = ByteArray(1024 * 32) { (it % 256).toByte() }
-        return header.toByteArray(Charsets.UTF_8) + padding
+        val editions = dto.compatibleEditions.mapNotNull { keyName ->
+            try {
+                GameEditionKey.valueOf(keyName)
+            } catch (_: Throwable) {
+                null
+            }
+        }.ifEmpty { GameEditionKey.entries }
+
+        val cachedFile = installed?.localCachePath?.takeIf { it.isNotBlank() }?.let { File(it) }
+        val fileExists = cachedFile != null && cachedFile.exists() && cachedFile.length() > 0L
+        val hashMatches = installed != null &&
+            (dto.sha256.isBlank() || installed.sha256.equals(dto.sha256, ignoreCase = true))
+        val versionUpToDate = installed != null && installed.versionCode >= dto.versionCode
+        val isLatestLocal = fileExists && hashMatches && versionUpToDate && dto.id !in outdatedIds
+
+        return ContentItem(
+            id = dto.id,
+            title = dto.title,
+            description = dto.description,
+            category = category,
+            version = dto.version,
+            sizeBytes = dto.sizeBytes,
+            updatedAt = dto.updatedAt,
+            targetFileName = dto.targetFilename,
+            sha256 = dto.sha256,
+            storagePath = dto.storagePath,
+            compatibleEditions = editions,
+            isDownloaded = isLatestLocal,
+            localFilePath = if (fileExists) cachedFile!!.absolutePath else null,
+            isDraft = false,
+            versionCode = dto.versionCode,
+            targetRelativePath = dto.targetRelativePath,
+            isRequired = dto.isRequired,
+            targetGroup = dto.targetGroup,
+            installedVersionCode = installed?.versionCode ?: 0,
+            needsUpdate = !isLatestLocal && (installed != null || dto.id in outdatedIds)
+        )
+    }
+
+    private fun sanitizeFilename(raw: String): String {
+        return raw.replace(Regex("[^A-Za-z0-9._-]"), "_")
     }
 
     fun isCompatibleWith(item: ContentItem, currentEdition: GameEditionKey): Boolean {

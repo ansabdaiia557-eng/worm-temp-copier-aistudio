@@ -32,12 +32,7 @@ class AutoDeleteWorker(
         val shizukuManager = ShizukuManager(applicationContext)
         val engine = FileOperationEngine(applicationContext, shizukuManager)
 
-        val (success, failureReason) = engine.safeDeleteTemporaryCopy(
-            targetFilePath = record.destinationPath,
-            expectedSha256 = record.expectedSha256,
-            destinationTreeUri = record.destinationTreeUri,
-            targetFileUri = record.targetFileUri
-        )
+        val (success, failureReason) = engine.safeDeleteTemporaryCopy(record)
 
         val notificationId = uniqueCopyId.hashCode()
 

@@ -24,6 +24,19 @@ jobs:
       - name: Grant Execute Permission for Gradlew
         run: chmod +x gradlew || true
 
+      - name: Prepare .env for Secrets Gradle Plugin
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          if [ -n "$SUPABASE_URL" ] || [ -n "$SUPABASE_PUBLISHABLE_KEY" ]; then
+            printf "SUPABASE_URL=%s\nSUPABASE_PUBLISHABLE_KEY=%s\n" \
+              "${SUPABASE_URL:-https://nqwmahahhichwmnxccrg.supabase.co}" \
+              "${SUPABASE_PUBLISHABLE_KEY:-CONFIGURE_IN_SECRETS}" > .env
+          else
+            cp .env.example .env
+          fi
+
       - name: Build Debug APK
         run: ./gradlew assembleDebug --stacktrace
 

@@ -42,6 +42,11 @@ import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.AlertDialog
@@ -49,6 +54,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -85,11 +91,14 @@ import com.example.data.GameEditionInfo
 import com.example.data.PRESET_GAME_EDITIONS
 import com.example.data.OperationStatus
 import com.example.data.OperationType
-import com.example.data. PathAccessStatus
+import com.example.data.PathAccessStatus
 import com.example.data.SavedPathEntity
 import com.example.data.SelectedFileItem
 import com.example.data.TransferProgressState
 import com.example.domain.FileOperationEngine
+import com.example.server.AuthSessionState
+import com.example.server.PubgCopyInstallState
+import com.example.server.ServerGateStatus
 import com.example.shizuku.ShizukuStatus
 import com.example.ui.components.FileExtensionBadgeIcon
 import com.example.ui.components.GamingCard
@@ -135,6 +144,14 @@ fun DashboardScreen(
     onNavigateToFiles: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onToggleLanguage: () -> Unit,
+    serverGateStatus: ServerGateStatus = ServerGateStatus(),
+    authSession: AuthSessionState = AuthSessionState(),
+    pubgInstallState: PubgCopyInstallState = PubgCopyInstallState(),
+    isGateChecking: Boolean = false,
+    onRefreshServerGate: () -> Unit = {},
+    onOpenAccountSheet: () -> Unit = {},
+    onStartServerPubgInstall: () -> Unit = {},
+    onLaunchPubg: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val strings = LocalAppStrings.current
@@ -160,6 +177,17 @@ fun DashboardScreen(
             )
         }
 
+        // 1b. ANS Server Control & Account Gate Card
+        item {
+            AnsServerStatusCard(
+                gateStatus = serverGateStatus,
+                authSession = authSession,
+                isChecking = isGateChecking,
+                onRefreshGate = onRefreshServerGate,
+                onOpenAccountSheet = onOpenAccountSheet
+            )
+        }
+
         // 2. Shizuku Status Card with Hero Visual Banner
         item {
             ShizukuStatusCard(
@@ -174,6 +202,16 @@ fun DashboardScreen(
             DashboardGameEditionsSelector(
                 selectedEditionKey = settings.selectedGameEdition,
                 onSelectEdition = onSelectGameEdition
+            )
+        }
+
+        // 3b. 10-Step Automatic Server PUBG Installer + Launch PUBG Card
+        item {
+            PubgServerAutoInstallCard(
+                gateStatus = serverGateStatus,
+                installState = pubgInstallState,
+                onStartInstall = onStartServerPubgInstall,
+                onLaunchPubg = onLaunchPubg
             )
         }
 
@@ -404,7 +442,7 @@ private fun DashboardTopBar(
                         border = BorderStroke(1.dp, NeonGreen.copy(alpha = 0.4f))
                     ) {
                         Text(
-                            text = "v1.2.0",
+                            text = "v1.3.0",
                             fontFamily = JetBrainsMonoFontFamily,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
@@ -1445,4 +1483,319 @@ private fun DashboardAutoDeleteConfig(
         }
     }
 }
+
+@Composable
+private fun AnsServerStatusCard(
+    gateStatus: ServerGateStatus,
+    authSession: AuthSessionState,
+    isChecking: Boolean,
+    onRefreshGate: () -> Unit,
+    onOpenAccountSheet: () -> Unit
+) {
+    val strings = LocalAppStrings.current
+    val statusColor = when {
+        gateStatus.canExecuteCopy -> NeonGreen
+        gateStatus.isReachable -> WarningOrange
+        else -> ErrorRed
+    }
+    val statusText = when {
+        gateStatus.canExecuteCopy -> strings.serverStatusConnected
+        gateStatus.isReachable -> strings.serverStatusBlocked
+        else -> strings.serverStatusOffline
+    }
+    val blockMsg = if (strings.isArabic) gateStatus.blockReasonAr else gateStatus.blockReasonEn
+
+    GamingCard(
+        modifier = Modifier.testTag("ans_server_status_card"),
+        glowBorderColor = statusColor.copy(alpha = 0.55f)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                PulsingStatusDot(color = statusColor)
+                Column {
+                    Text(
+                        text = strings.ansServerControlTitle,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "$statusText • ${strings.serverRevisionLabel(gateStatus.globalFileRevision)}",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 11.sp,
+                        color = statusColor
+                    )
+                }
+            }
+
+            IconButton(
+                onClick = onRefreshGate,
+                enabled = !isChecking,
+                modifier = Modifier.testTag("btn_sync_server_gate")
+            ) {
+                if (isChecking) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = NeonGreen,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.CloudSync,
+                        contentDescription = strings.btnSyncServer,
+                        tint = NeonGreen
+                    )
+                }
+            }
+        }
+
+        if (!blockMsg.isNullOrBlank() && !gateStatus.canExecuteCopy) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = if (gateStatus.isReachable) Color(0xFF231B12) else ErrorRedSurface.copy(alpha = 0.7f),
+                shape = RoundedCornerShape(10.dp),
+                border = BorderStroke(1.dp, statusColor.copy(alpha = 0.5f))
+            ) {
+                Text(
+                    text = blockMsg,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextPrimary,
+                    modifier = Modifier.padding(10.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = onOpenAccountSheet,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(48.dp)
+                    .testTag("btn_open_account_sheet"),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, TacticalCyan)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AccountCircle,
+                    contentDescription = null,
+                    tint = TacticalCyan,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (authSession.isLoggedIn) {
+                        gateStatus.subscription.planName ?: strings.btnAccountAndPlan
+                    } else {
+                        strings.btnSignIn
+                    },
+                    color = TacticalCyan,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            OutlinedButton(
+                onClick = onRefreshGate,
+                enabled = !isChecking,
+                modifier = Modifier
+                    .height(48.dp)
+                    .testTag("btn_refresh_server_gate"),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.dp, NeonGreen.copy(alpha = 0.6f))
+            ) {
+                Text(
+                    text = strings.btnSyncServer,
+                    color = NeonGreen,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PubgServerAutoInstallCard(
+    gateStatus: ServerGateStatus,
+    installState: PubgCopyInstallState,
+    onStartInstall: () -> Unit,
+    onLaunchPubg: () -> Unit
+) {
+    val strings = LocalAppStrings.current
+    val animatedProgress by animateFloatAsState(
+        targetValue = installState.progress.coerceIn(0f, 1f),
+        animationSpec = tween(durationMillis = 250),
+        label = "pubg_install_progress"
+    )
+    val outdatedCount = gateStatus.outdatedFileIds.size
+
+    GamingCard(
+        modifier = Modifier.testTag("pubg_auto_install_card"),
+        glowBorderColor = when {
+            installState.canLaunchPubg -> NeonGreen
+            installState.hasError -> ErrorRed
+            else -> TacticalCyan.copy(alpha = 0.55f)
+        }
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = strings.pubgAutoInstallTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = strings.pubgAutoInstallSubtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (outdatedCount > 0) {
+                Surface(
+                    color = WarningOrange.copy(alpha = 0.16f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, WarningOrange.copy(alpha = 0.6f))
+                ) {
+                    Text(
+                        text = "$outdatedCount ${strings.badgeNeedsUpdate}",
+                        fontFamily = JetBrainsMonoFontFamily,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = WarningOrange,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+        }
+
+        if (installState.isRunning || installState.currentStepIndex > 0 || installState.hasError) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = installState.stepTitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (installState.hasError) ErrorRed else TextPrimary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "${installState.currentStepIndex}/${installState.totalSteps}",
+                            fontFamily = JetBrainsMonoFontFamily,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (installState.hasError) ErrorRed else NeonGreen
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { animatedProgress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(RoundedCornerShape(4.dp)),
+                        color = if (installState.hasError) ErrorRed else NeonGreen,
+                        trackColor = Color(0xFF0E1216)
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Button(
+            onClick = onStartInstall,
+            enabled = !installState.isRunning,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+                .testTag("btn_install_server_to_pubg"),
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = TacticalCyan,
+                contentColor = ObsidianDark
+            )
+        ) {
+            Icon(
+                imageVector = Icons.Default.CloudDownload,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = strings.btnInstallToPubg,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        val canLaunch = installState.canLaunchPubg &&
+            !installState.isRunning &&
+            (!gateStatus.isConfigured || (gateStatus.isReachable && gateStatus.canExecuteCopy))
+
+        Button(
+            onClick = onLaunchPubg,
+            enabled = canLaunch,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+                .testTag("btn_launch_pubg"),
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = NeonGreen,
+                contentColor = ObsidianDark,
+                disabledContainerColor = Color(0xFF1A2024),
+                disabledContentColor = TextSecondary
+            )
+        ) {
+            Icon(
+                imageVector = if (canLaunch) Icons.Default.PlayArrow else Icons.Default.Lock,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = strings.btnLaunchPubg,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = if (canLaunch) strings.launchPubgUnlockedHint else strings.launchPubgLockedHint,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (canLaunch) NeonGreen else TextSecondary
+        )
+    }
+}
+
 

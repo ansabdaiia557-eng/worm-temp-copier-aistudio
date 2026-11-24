@@ -70,6 +70,9 @@ import com.example.data.OperationType
 import com.example.data.GameEditionKey
 import com.example.data.PRESET_GAME_EDITIONS
 import com.example.ui.WormCopierViewModel
+import com.example.ui.components.AccountAuthAndSubscriptionDialog
+import com.example.ui.components.AppUpdateDialog
+import com.example.ui.components.MaintenanceBlockingOverlay
 import com.example.ui.components.SplashScreenOverlay
 import com.example.ui.components.TelegramGateDialog
 import com.example.ui.components.TransferConfirmationDialog
@@ -146,6 +149,13 @@ fun WormCopierApp(
     val contentItems by viewModel.contentItems.collectAsStateWithLifecycle()
     val downloadingItemId by viewModel.downloadingItemId.collectAsStateWithLifecycle()
     val downloadProgress by viewModel.downloadProgress.collectAsStateWithLifecycle()
+    val authSession by viewModel.authSession.collectAsStateWithLifecycle()
+    val serverGateStatus by viewModel.serverGateStatus.collectAsStateWithLifecycle()
+    val pubgInstallState by viewModel.pubgInstallState.collectAsStateWithLifecycle()
+    val isGateChecking by viewModel.isGateChecking.collectAsStateWithLifecycle()
+    val isAuthBusy by viewModel.isAuthBusy.collectAsStateWithLifecycle()
+    val showAccountSheet by viewModel.showAccountSheet.collectAsStateWithLifecycle()
+    val dismissedOptionalUpdateCode by viewModel.dismissedOptionalUpdateCode.collectAsStateWithLifecycle()
 
     val activeEditionKey = remember(settings.selectedGameEdition) {
         try {
@@ -307,7 +317,15 @@ fun WormCopierApp(
                                     onCancelTransfer = viewModel::cancelActiveTransfer,
                                     onNavigateToFiles = { currentTab = AppDestination.FILES },
                                     onNavigateToSettings = { currentTab = AppDestination.SETTINGS },
-                                    onToggleLanguage = viewModel::toggleLanguage
+                                    onToggleLanguage = viewModel::toggleLanguage,
+                                    serverGateStatus = serverGateStatus,
+                                    authSession = authSession,
+                                    pubgInstallState = pubgInstallState,
+                                    isGateChecking = isGateChecking,
+                                    onRefreshServerGate = { viewModel.refreshServerGate(silent = false) },
+                                    onOpenAccountSheet = viewModel::openAccountSheet,
+                                    onStartServerPubgInstall = { viewModel.startServerPubgInstall() },
+                                    onLaunchPubg = viewModel::launchPubg
                                 )
 
                                 AppDestination.FILES -> FileManagerScreen(
@@ -351,7 +369,8 @@ fun WormCopierApp(
                                     activeEditionTitle = activeEditionTitle,
                                     downloadingItemId = downloadingItemId,
                                     downloadProgress = downloadProgress,
-                                    onUseContentItem = viewModel::useContentItem
+                                    onUseContentItem = viewModel::useContentItem,
+                                    onSyncServer = { viewModel.refreshServerGate(silent = false) }
                                 )
 
                                 AppDestination.AUTO_DELETE -> com.example.ui.screens.AutoDeleteScreen(
@@ -383,7 +402,12 @@ fun WormCopierApp(
                                     onDarkModeChange = viewModel::setDarkMode,
                                     onResetSettings = {
                                         viewModel.resetAllSettings(appStrings.resetSettingsConfirmMsg)
-                                    }
+                                    },
+                                    authSession = authSession,
+                                    serverGateStatus = serverGateStatus,
+                                    onOpenAccountSheet = viewModel::openAccountSheet,
+                                    onRefreshServerGate = { viewModel.refreshServerGate(silent = false) },
+                                    onSignOut = viewModel::signOut
                                 )
                             }
                         }
@@ -450,9 +474,58 @@ fun WormCopierApp(
                 // Animated Opening Splash Screen
                 SplashScreenOverlay(visible = showSplash)
 
-                // First Launch Telegram Welcome Gate Dialog
-                if (!telegramGateCompleted && !showSplash) {
+                // 1. Authoritative Server Maintenance Blocking Overlay (highest priority after splash)
+                if (!showSplash && serverGateStatus.isConfigured && serverGateStatus.maintenance.isActive) {
+                    MaintenanceBlockingOverlay(
+                        gateStatus = serverGateStatus,
+                        isChecking = isGateChecking,
+                        onRefreshNow = { viewModel.refreshServerGate(silent = false) }
+                    )
+                }
+
+                // 2. App Update Dialog (Mandatory or Dismissible Optional)
+                val appUpdate = serverGateStatus.appUpdate
+                if (!showSplash &&
+                    !serverGateStatus.maintenance.isActive &&
+                    appUpdate != null &&
+                    (appUpdate.isMandatory || appUpdate.versionCode != dismissedOptionalUpdateCode)
+                ) {
+                    AppUpdateDialog(
+                        updateInfo = appUpdate,
+                        onDismissOptional = { viewModel.dismissOptionalAppUpdate(appUpdate.versionCode) }
+                    )
+                }
+
+                // 3. Account Auth, Ban Notice & Subscription Activation Dialog
+                if (!showSplash && showAccountSheet) {
+                    AccountAuthAndSubscriptionDialog(
+                        authSession = authSession,
+                        gateStatus = serverGateStatus,
+                        isBusy = isAuthBusy,
+                        onSignIn = viewModel::signIn,
+                        onSignUp = viewModel::signUp,
+                        onSignOut = viewModel::signOut,
+                        onRedeemCode = viewModel::redeemActivationCode,
+                        onDismiss = viewModel::closeAccountSheet
+                    )
+                }
+
+                // 4. Telegram Channel Welcome & Server Verification Gate
+                val needsServerTelegramVerify = serverGateStatus.isReachable &&
+                    serverGateStatus.user != null &&
+                    serverGateStatus.telegram.required &&
+                    !serverGateStatus.telegram.verified
+                if (!showSplash &&
+                    !showAccountSheet &&
+                    !serverGateStatus.maintenance.isActive &&
+                    (!telegramGateCompleted || needsServerTelegramVerify)
+                ) {
                     TelegramGateDialog(
+                        channelUrl = serverGateStatus.telegram.channelUrl,
+                        showServerVerification = serverGateStatus.isReachable && serverGateStatus.user != null,
+                        isVerifiedByServer = serverGateStatus.telegram.verified,
+                        isBusy = isAuthBusy,
+                        onVerifyMembership = viewModel::verifyTelegramMembership,
                         onContinue = viewModel::completeTelegramGate
                     )
                 }

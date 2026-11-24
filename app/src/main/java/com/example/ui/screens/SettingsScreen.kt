@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
@@ -42,6 +43,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.AppSettings
 import com.example.data.DEFAULT_PUFFER_TEMP_PATH
+import com.example.server.AuthSessionState
+import com.example.server.ServerGateStatus
 import com.example.shizuku.ShizukuStatus
 import com.example.ui.components.GamingCard
 import com.example.ui.i18n.LocalAppStrings
@@ -66,6 +69,11 @@ fun SettingsScreen(
     onLanguageChange: (String) -> Unit,
     onDarkModeChange: (Boolean) -> Unit,
     onResetSettings: () -> Unit,
+    authSession: AuthSessionState = AuthSessionState(),
+    serverGateStatus: ServerGateStatus = ServerGateStatus(),
+    onOpenAccountSheet: () -> Unit = {},
+    onRefreshServerGate: () -> Unit = {},
+    onSignOut: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val strings = LocalAppStrings.current
@@ -83,6 +91,69 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold
             )
+        }
+
+        // 0. ANS Server Account & Subscription
+        item {
+            GamingCard(modifier = Modifier.testTag("settings_account_card")) {
+                SectionHeader(
+                    icon = Icons.Default.AccountCircle,
+                    title = strings.settingsAccountSection
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = if (authSession.isLoggedIn) {
+                        "${authSession.email} • ${if (serverGateStatus.subscription.isActive) strings.subscriptionActiveBadge else strings.subscriptionInactiveBadge}"
+                    } else {
+                        strings.authTitleSignIn
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onOpenAccountSheet,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("settings_open_account_btn"),
+                        border = BorderStroke(1.dp, TacticalCyan)
+                    ) {
+                        Text(
+                            text = strings.btnAccountAndPlan,
+                            color = TacticalCyan,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    OutlinedButton(
+                        onClick = onRefreshServerGate,
+                        modifier = Modifier.testTag("settings_sync_server_btn"),
+                        border = BorderStroke(1.dp, NeonGreen)
+                    ) {
+                        Text(
+                            text = strings.btnSyncServer,
+                            color = NeonGreen,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+                if (authSession.isLoggedIn) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = onSignOut,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("settings_sign_out_btn"),
+                        border = BorderStroke(1.dp, ErrorRed),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed)
+                    ) {
+                        Text(text = strings.btnSignOut, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
 
         // 1. Shizuku Settings
@@ -254,7 +325,7 @@ fun SettingsScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Worm Temp Copier • Build v1.2.0 (Android 12+ / Shizuku 13.1.5)",
+                    text = "Worm Temp Copier • Build v1.3.0 (ANS Server Control + Shizuku 13.1.5)",
                     fontFamily = JetBrainsMonoFontFamily,
                     fontSize = 12.sp,
                     color = NeonGreen,

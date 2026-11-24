@@ -78,7 +78,8 @@ fun ContentCenterScreen(
     activeEditionTitle: String,
     downloadingItemId: String?,
     downloadProgress: Float,
-    onUseContentItem: (ContentItem) -> Unit
+    onUseContentItem: (ContentItem) -> Unit,
+    onSyncServer: () -> Unit = {}
 ) {
     val strings = LocalAppStrings.current
     var selectedTabIndex by remember { mutableIntStateOf(0) }
@@ -111,34 +112,54 @@ fun ContentCenterScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(NeonGreenSurface),
-                    contentAlignment = Alignment.Center
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.SportsEsports,
-                        contentDescription = null,
-                        tint = NeonGreen,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(NeonGreenSurface),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.SportsEsports,
+                            contentDescription = null,
+                            tint = NeonGreen,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = strings.contentCenterTitle,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = strings.contentCenterSubtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary
+                        )
+                    }
                 }
-                Column {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = onSyncServer,
+                    modifier = Modifier.testTag("content_center_sync_btn"),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, NeonGreen.copy(alpha = 0.6f))
+                ) {
                     Text(
-                        text = strings.contentCenterTitle,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                    Text(
-                        text = strings.contentCenterSubtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary
+                        text = strings.btnSyncServer,
+                        color = NeonGreen,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -292,15 +313,45 @@ private fun ContentItemCard(
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    if (item.targetGroup.equals("vip", ignoreCase = true)) {
+                        Surface(
+                            color = WarningYellow.copy(alpha = 0.16f),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = strings.badgeVipGroup,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = WarningYellow,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    if (item.needsUpdate) {
+                        Surface(
+                            color = ErrorRed.copy(alpha = 0.18f),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = strings.badgeNeedsUpdate,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = ErrorRed,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
                     // Version tag
                     Surface(
                         color = ObsidianDark,
                         shape = RoundedCornerShape(4.dp)
                     ) {
                         Text(
-                            text = item.version,
+                            text = "${item.version} (#${item.versionCode})",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
                             fontFamily = FontFamily.Monospace,

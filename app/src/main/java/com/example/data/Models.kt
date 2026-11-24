@@ -158,7 +158,8 @@ data class ScheduledDeletionEntity(
     val deleteAtMillis: Long, // timestamp when it should be deleted
     val isDeleted: Boolean = false,
     val cancelled: Boolean = false,
-    val failureReason: String? = null
+    val failureReason: String? = null,
+    val canonicalPath: String? = null // Verified canonical destination path
 )
 
 data class AppSettings(
@@ -229,5 +230,11 @@ data class ContentItem(
     val isDownloaded: Boolean = false,
     val localFilePath: String? = null,
     val isDraft: Boolean = false,
-    val downloadProgress: Float = 0f
+    val downloadProgress: Float = 0f,
+    val versionCode: Int = 1,
+    val targetRelativePath: String = "",
+    val isRequired: Boolean = true,
+    val targetGroup: String = "all",
+    val installedVersionCode: Int = 0,
+    val needsUpdate: Boolean = false
 )

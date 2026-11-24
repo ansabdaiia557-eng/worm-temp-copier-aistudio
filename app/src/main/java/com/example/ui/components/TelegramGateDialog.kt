@@ -18,15 +18,23 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,20 +52,27 @@ import com.example.ui.theme.NeonGreenSurface
 import com.example.ui.theme.ObsidianCard
 import com.example.ui.theme.ObsidianDark
 import com.example.ui.theme.ObsidianStroke
+import com.example.ui.theme.TacticalCyan
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
 
-private const val TELEGRAM_CHANNEL_URL = "https://t.me/Kharbash_anas"
+private const val DEFAULT_TELEGRAM_CHANNEL_URL = "https://t.me/Kharbash_anas"
 
 @Composable
 fun TelegramGateDialog(
+    channelUrl: String = DEFAULT_TELEGRAM_CHANNEL_URL,
+    showServerVerification: Boolean = false,
+    isVerifiedByServer: Boolean = false,
+    isBusy: Boolean = false,
+    onVerifyMembership: (String) -> Unit = {},
     onContinue: () -> Unit
 ) {
     val context = LocalContext.current
     val strings = LocalAppStrings.current
+    var telegramUserIdInput by remember { mutableStateOf("") }
 
     Dialog(
-        onDismissRequest = { /* Require action buttons */ },
+        onDismissRequest = { /* Require explicit user action */ },
         properties = DialogProperties(
             dismissOnBackPress = false,
             dismissOnClickOutside = false
@@ -79,7 +94,6 @@ fun TelegramGateDialog(
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Header Telegram Icon Badge
                 Box(
                     modifier = Modifier
                         .size(64.dp)
@@ -88,7 +102,7 @@ fun TelegramGateDialog(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Send,
+                        imageVector = if (isVerifiedByServer) Icons.Filled.CheckCircle else Icons.AutoMirrored.Filled.Send,
                         contentDescription = "Telegram Channel",
                         tint = NeonGreen,
                         modifier = Modifier.size(32.dp)
@@ -115,7 +129,7 @@ fun TelegramGateDialog(
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
                     text = strings.telegramGateWelcomeMsg,
@@ -125,18 +139,17 @@ fun TelegramGateDialog(
                     lineHeight = 20.sp
                 )
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
-                // Action: Join Telegram Channel Button
+                // Join Telegram Channel Button
                 Button(
                     onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(TELEGRAM_CHANNEL_URL)).apply {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(channelUrl.ifBlank { DEFAULT_TELEGRAM_CHANNEL_URL })).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
                         try {
                             context.startActivity(intent)
                         } catch (_: Exception) {
-                            // If no browser or telegram client, ignore safely
                         }
                     },
                     modifier = Modifier
@@ -149,27 +162,82 @@ fun TelegramGateDialog(
                         contentColor = ObsidianDark
                     )
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Send,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = strings.btnJoinTelegramChannel,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+
+                if (showServerVerification && !isVerifiedByServer) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    OutlinedTextField(
+                        value = telegramUserIdInput,
+                        onValueChange = { input ->
+                            telegramUserIdInput = input.filter { it.isDigit() }
+                        },
+                        label = { Text(strings.telegramUserIdLabel) },
+                        supportingText = { Text(strings.telegramUserIdHint, fontSize = 11.sp) },
+                        singleLine = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("telegram_user_id_input")
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Button(
+                        onClick = { onVerifyMembership(telegramUserIdInput) },
+                        enabled = !isBusy && telegramUserIdInput.length >= 4,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("btn_verify_telegram_membership"),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = TacticalCyan,
+                            contentColor = ObsidianDark
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                    ) {
+                        if (isBusy) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = ObsidianDark,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.VerifiedUser,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                        }
                         Text(
-                            text = strings.btnJoinTelegramChannel,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
+                            text = strings.btnVerifyTelegramMembership,
+                            fontWeight = FontWeight.Bold
                         )
                     }
+                } else if (isVerifiedByServer) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = strings.telegramVerifiedBadge,
+                        color = NeonGreen,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Action: Continue to App Button
+                // Continue to App Button
                 OutlinedButton(
                     onClick = onContinue,
                     modifier = Modifier

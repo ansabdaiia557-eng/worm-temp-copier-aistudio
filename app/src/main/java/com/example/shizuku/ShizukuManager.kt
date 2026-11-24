@@ -344,4 +344,19 @@ class ShizukuManager(private val context: Context) {
         if (!res.isSuccess || res.stdout.isBlank()) return null
         return res.stdout.trim().split(Regex("\\s+")).firstOrNull()?.lowercase()
     }
+
+    suspend fun getFileSizeViaShizuku(filePath: String): Long? {
+        val escaped = escapeShellArg(filePath)
+        val res = executeShellCommand("stat -c %s $escaped 2>/dev/null || wc -c < $escaped")
+        if (!res.isSuccess || res.stdout.isBlank()) return null
+        return res.stdout.trim().lines().firstOrNull()?.trim()?.toLongOrNull()
+    }
+
+    suspend fun getFileLastModifiedViaShizuku(filePath: String): Long? {
+        val escaped = escapeShellArg(filePath)
+        val res = executeShellCommand("stat -c %Y $escaped 2>/dev/null")
+        if (!res.isSuccess || res.stdout.isBlank()) return null
+        val seconds = res.stdout.trim().lines().firstOrNull()?.trim()?.toLongOrNull() ?: return null
+        return seconds * 1000L
+    }
 }

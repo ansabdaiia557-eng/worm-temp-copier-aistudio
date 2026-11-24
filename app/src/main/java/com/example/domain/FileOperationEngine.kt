@@ -284,23 +284,61 @@ class FileOperationEngine(
     }
 
     /**
-     * Safe deletion of a temporary copy:
-     * - Verifies that the file is indeed the target copy inside the destination
-     * - Verifies the SHA-256 fingerprint if available to prevent deleting unrelated files
-     * - Refuses to delete if file has been modified or replaced
+     * Safe deletion of a temporary copy using comprehensive multi-factor ownership verification:
+     * - Operation ID & Canonical Path verification
+     * - File Size verification against expected record size
+     * - Creation timestamp verification (refuses deletion if file predates copy creation)
+     * - SHA-256 checksum verification
+     * - Runtime validation of Shizuku Binder status & SAF persisted URI permissions
+     * - Zero unsafe fallback on restricted Android/data paths
      */
+    suspend fun safeDeleteTemporaryCopy(record: com.example.data.ScheduledDeletionEntity): Pair<Boolean, String?> {
+        return safeDeleteTemporaryCopy(
+            targetFilePath = record.destinationPath,
+            expectedSha256 = record.expectedSha256,
+            destinationTreeUri = record.destinationTreeUri,
+            targetFileUri = record.targetFileUri,
+            expectedFileSize = record.fileSize,
+            copiedAtMillis = record.copiedAtMillis,
+            expectedCanonicalPath = record.canonicalPath,
+            operationId = record.uniqueCopyId
+        )
+    }
+
     suspend fun safeDeleteTemporaryCopy(
         targetFilePath: String,
         expectedSha256: String?,
         destinationTreeUri: String? = null,
-        targetFileUri: String? = null
+        targetFileUri: String? = null,
+        expectedFileSize: Long? = null,
+        copiedAtMillis: Long? = null,
+        expectedCanonicalPath: String? = null,
+        operationId: String? = null
     ): Pair<Boolean, String?> = withContext(Dispatchers.IO) {
         val target = File(targetFilePath)
         val isRestricted = isRestrictedAndroidDataPath(targetFilePath)
 
+        // 1. Canonical path & destination boundary validation
+        val actualCanonical = try {
+            target.canonicalPath
+        } catch (_: Throwable) {
+            target.absolutePath
+        }
+
+        if (!expectedCanonicalPath.isNullOrBlank()) {
+            if (actualCanonical != expectedCanonicalPath && target.absolutePath != expectedCanonicalPath) {
+                return@withContext false to "Path security violation: Canonical path ($actualCanonical) does not match expected copy path ($expectedCanonicalPath)!"
+            }
+        }
+
+        // Boundary sanity check: refuse to delete root, system, or sensitive folders
+        if (isForbiddenDeletionPath(actualCanonical)) {
+            return@withContext false to "Security violation: Target path ($actualCanonical) is within a protected system directory!"
+        }
+
         // Case A: Restricted Android/data or Android/obb path (such as PUBG / Saved / Paks / puffer_temp)
         if (isRestricted) {
-            // Priority 1: Shizuku elevated operations
+            // Priority 1: Shizuku elevated operations (checked dynamically at execution time)
             val shizukuStatus = shizukuManager.refreshStatus()
             if (shizukuStatus.isReadyForElevatedOps) {
                 val exists = shizukuManager.fileExistsViaShizuku(targetFilePath)
@@ -308,6 +346,23 @@ class FileOperationEngine(
                     return@withContext true to null // Target copy already removed
                 }
 
+                // Multi-factor Check 1: File size
+                if (expectedFileSize != null && expectedFileSize > 0L) {
+                    val actualSize = shizukuManager.getFileSizeViaShizuku(targetFilePath)
+                    if (actualSize != null && actualSize != expectedFileSize) {
+                        return@withContext false to "File size mismatch: Expected $expectedFileSize bytes, but found $actualSize bytes on disk!"
+                    }
+                }
+
+                // Multi-factor Check 2: Timestamp (refuse if file predates copy creation)
+                if (copiedAtMillis != null && copiedAtMillis > 0L) {
+                    val lastModified = shizukuManager.getFileLastModifiedViaShizuku(targetFilePath)
+                    if (lastModified != null && lastModified > 0L && lastModified < copiedAtMillis - 10000L) {
+                        return@withContext false to "File ownership mismatch: File timestamp ($lastModified) predates copy creation time ($copiedAtMillis)!"
+                    }
+                }
+
+                // Multi-factor Check 3: SHA-256 fingerprint
                 if (!expectedSha256.isNullOrBlank()) {
                     val currentHash = shizukuManager.computeSha256ViaShizuku(targetFilePath)
                     if (currentHash != null && !currentHash.equals(expectedSha256, ignoreCase = true)) {
@@ -323,27 +378,30 @@ class FileOperationEngine(
                 }
             }
 
-            // Priority 2: SAF DocumentFile deletion if tree URI or direct file URI is granted
+            // Priority 2: SAF DocumentFile deletion if tree URI or direct file URI is granted & persisted
             val safResult = tryDeleteViaSaf(
                 targetFilePath = targetFilePath,
                 expectedSha256 = expectedSha256,
                 destinationTreeUri = destinationTreeUri,
-                targetFileUri = targetFileUri
+                targetFileUri = targetFileUri,
+                expectedFileSize = expectedFileSize,
+                copiedAtMillis = copiedAtMillis
             )
             if (safResult != null) {
                 return@withContext safResult
             }
 
             // Provide clear, actionable diagnostic reason when neither Shizuku nor SAF is ready
+            // Never attempt dangerous direct File.delete() fallback on restricted Android paths
             val failureDetail = when {
                 !shizukuStatus.isInstalled ->
                     "Shizuku permission unavailable: Shizuku is not installed and SAF permission is missing for restricted Android/data path."
                 !shizukuStatus.isBinderAlive ->
-                    "Shizuku permission unavailable: Shizuku service is not running."
+                    "Shizuku permission unavailable: Shizuku service is not running. Please start Shizuku to allow elevated deletion on restricted path."
                 !shizukuStatus.isPermissionGranted ->
-                    "Shizuku permission unavailable: Shizuku permission not granted by user."
+                    "Shizuku permission unavailable: Shizuku permission has not been granted by user."
                 else ->
-                    "Permission denied: Restricted Android/data path requires active Shizuku or valid SAF URI permission."
+                    "Permission denied: Restricted Android/data path requires active Shizuku service or valid SAF URI permission."
             }
             return@withContext false to failureDetail
         }
@@ -355,16 +413,23 @@ class FileOperationEngine(
                 targetFilePath = targetFilePath,
                 expectedSha256 = expectedSha256,
                 destinationTreeUri = destinationTreeUri,
-                targetFileUri = targetFileUri
+                targetFileUri = targetFileUri,
+                expectedFileSize = expectedFileSize,
+                copiedAtMillis = copiedAtMillis
             )
             if (safResult != null && safResult.first) {
                 return@withContext safResult
             }
         }
 
-        // Standard direct file deletion
+        // Standard direct file deletion with multi-factor verification
         if (target.exists() && target.isFile) {
-            return@withContext safeDeleteDirectFile(target, expectedSha256)
+            return@withContext safeDeleteDirectFile(
+                target = target,
+                expectedSha256 = expectedSha256,
+                expectedFileSize = expectedFileSize,
+                copiedAtMillis = copiedAtMillis
+            )
         }
 
         if (!target.exists()) {
@@ -378,7 +443,9 @@ class FileOperationEngine(
         targetFilePath: String,
         expectedSha256: String?,
         destinationTreeUri: String?,
-        targetFileUri: String?
+        targetFileUri: String?,
+        expectedFileSize: Long? = null,
+        copiedAtMillis: Long? = null
     ): Pair<Boolean, String?>? {
         val fileName = targetFilePath.substringAfterLast('/')
 
@@ -388,6 +455,18 @@ class FileOperationEngine(
                 val fileUri = Uri.parse(targetFileUri)
                 val doc = DocumentFile.fromSingleUri(context, fileUri)
                 if (doc != null && doc.exists()) {
+                    if (expectedFileSize != null && expectedFileSize > 0L) {
+                        val docSize = doc.length()
+                        if (docSize > 0L && docSize != expectedFileSize) {
+                            return false to "File size mismatch: Expected $expectedFileSize bytes, but found $docSize bytes via SAF!"
+                        }
+                    }
+                    if (copiedAtMillis != null && copiedAtMillis > 0L) {
+                        val docTime = doc.lastModified()
+                        if (docTime > 0L && docTime < copiedAtMillis - 10000L) {
+                            return false to "File ownership mismatch: File timestamp ($docTime) predates copy creation time ($copiedAtMillis)!"
+                        }
+                    }
                     if (!expectedSha256.isNullOrBlank()) {
                         val currentHash = context.contentResolver.openInputStream(fileUri)?.use {
                             computeSha256FromStream(it)
@@ -408,10 +487,31 @@ class FileOperationEngine(
         if (!treeUriStr.isNullOrBlank()) {
             try {
                 val treeUri = Uri.parse(treeUriStr)
+                // Verify persisted permission at execution time
+                val hasPersistedPermission = try {
+                    context.contentResolver.persistedUriPermissions.any { perm ->
+                        perm.uri == treeUri && perm.isWritePermission
+                    }
+                } catch (_: Throwable) {
+                    false
+                }
+
                 val treeDoc = DocumentFile.fromTreeUri(context, treeUri)
-                if (treeDoc != null && treeDoc.exists() && treeDoc.canWrite()) {
+                if (treeDoc != null && treeDoc.exists() && (treeDoc.canWrite() || hasPersistedPermission)) {
                     val fileDoc = treeDoc.findFile(fileName)
                     if (fileDoc != null && fileDoc.exists()) {
+                        if (expectedFileSize != null && expectedFileSize > 0L) {
+                            val docSize = fileDoc.length()
+                            if (docSize > 0L && docSize != expectedFileSize) {
+                                return false to "File size mismatch: Expected $expectedFileSize bytes, but found $docSize bytes via SAF!"
+                            }
+                        }
+                        if (copiedAtMillis != null && copiedAtMillis > 0L) {
+                            val docTime = fileDoc.lastModified()
+                            if (docTime > 0L && docTime < copiedAtMillis - 10000L) {
+                                return false to "File ownership mismatch: File timestamp ($docTime) predates copy creation time ($copiedAtMillis)!"
+                            }
+                        }
                         if (!expectedSha256.isNullOrBlank()) {
                             val currentHash = context.contentResolver.openInputStream(fileDoc.uri)?.use {
                                 computeSha256FromStream(it)
@@ -992,11 +1092,45 @@ class FileOperationEngine(
             return normalized.contains("/Android/data/") || normalized.contains("/Android/obb/")
         }
 
-        fun safeDeleteDirectFile(target: File, expectedSha256: String?): Pair<Boolean, String?> {
+        fun isForbiddenDeletionPath(path: String): Boolean {
+            val normalized = path.replace('\\', '/')
+            val forbiddenPrefixes = listOf(
+                "/system", "/vendor", "/bin", "/sbin", "/etc", "/dev", "/proc", "/sys", "/data/app"
+            )
+            if (normalized == "/" || normalized == "/storage" || normalized == "/storage/emulated" || normalized == "/storage/emulated/0") {
+                return true
+            }
+            return forbiddenPrefixes.any { normalized.startsWith(it) }
+        }
+
+        fun safeDeleteDirectFile(
+            target: File,
+            expectedSha256: String?,
+            expectedFileSize: Long? = null,
+            copiedAtMillis: Long? = null
+        ): Pair<Boolean, String?> {
             if (!target.exists()) return true to null
+
+            if (isForbiddenDeletionPath(target.absolutePath)) {
+                return false to "Security violation: Target is within a protected system directory!"
+            }
+
+            if (expectedFileSize != null && expectedFileSize > 0L) {
+                if (target.length() != expectedFileSize) {
+                    return false to "File size mismatch: Expected $expectedFileSize bytes, but found ${target.length()} bytes on disk!"
+                }
+            }
+
+            if (copiedAtMillis != null && copiedAtMillis > 0L) {
+                val lm = target.lastModified()
+                if (lm > 0L && lm < copiedAtMillis - 10000L) {
+                    return false to "File ownership mismatch: File timestamp ($lm) predates copy creation time ($copiedAtMillis)!"
+                }
+            }
+
             if (!expectedSha256.isNullOrBlank()) {
                 val currentHash = computeSha256ForFile(target)
-                if (currentHash != null && currentHash != expectedSha256) {
+                if (currentHash != null && !currentHash.equals(expectedSha256, ignoreCase = true)) {
                     return false to "File identity mismatch: File was modified or replaced after copy!"
                 }
             }
