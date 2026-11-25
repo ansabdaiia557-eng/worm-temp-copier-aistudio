@@ -842,6 +842,50 @@ serve(async (req: Request) => {
         return jsonResponse({ success: true, logs: data || [] });
       }
 
+      case "reset_device": {
+        const targetId = String(body.user_id || "");
+        if (!targetId) return jsonResponse({ success: false, error: "معرّف المستخدم ناقص" }, 400);
+        const { error } = await supabaseAdmin
+          .from("user_profiles")
+          .update({ device_id: null, device_model: null, device_locked_at: null })
+          .eq("id", targetId);
+        if (error) throw error;
+        await writeAudit("RESET_DEVICE", "user", targetId, {});
+        return jsonResponse({ success: true, message: "تم إعادة ضبط الجهاز. أول جهاز يفتح الحساب هيتربط." });
+      }
+
+      case "list_suspicious": {
+        const since = new Date(Date.now() - 7 * 86400000).toISOString();
+        const { data: evs, error } = await supabaseAdmin
+          .from("security_events")
+          .select("event_type, user_id, created_at, description")
+          .not("user_id", "is", null)
+          .in("event_type", ["INVALID_ACTIVATION_CODE", "DEVICE_MISMATCH", "TAMPERED_APP", "RATE_LIMIT_EXCEEDED", "BANNED_DOWNLOAD_ATTEMPT", "TELEGRAM_LOGIN_FAILED"])
+          .gte("created_at", since)
+          .order("created_at", { ascending: false })
+          .limit(2000);
+        if (error) throw error;
+        const weights: Record<string, number> = { INVALID_ACTIVATION_CODE: 1, DEVICE_MISMATCH: 5, TAMPERED_APP: 10, RATE_LIMIT_EXCEEDED: 3, BANNED_DOWNLOAD_ATTEMPT: 4, TELEGRAM_LOGIN_FAILED: 1 };
+        const agg = new Map<string, { counts: Record<string, number>; score: number; last: string }>();
+        for (const e of evs || []) {
+          const k = String(e.user_id);
+          const a = agg.get(k) || { counts: {}, score: 0, last: e.created_at };
+          a.counts[e.event_type] = (a.counts[e.event_type] || 0) + 1;
+          a.score += weights[e.event_type] || 1;
+          agg.set(k, a);
+        }
+        const ids = [...agg.keys()];
+        const { data: profs } = ids.length
+          ? await supabaseAdmin.from("user_profiles").select("id, display_name, telegram_username, telegram_user_id, is_banned, device_id, device_model").in("id", ids)
+          : { data: [] as Record<string, unknown>[] };
+        const rows = ids.map((id) => {
+          const p = (profs || []).find((x: Record<string, unknown>) => x.id === id) || {};
+          const a = agg.get(id)!;
+          return { user_id: id, display_name: p.display_name || null, telegram_username: p.telegram_username || null, telegram_user_id: p.telegram_user_id || null, is_banned: Boolean(p.is_banned), device_model: p.device_model || null, has_device: Boolean(p.device_id), counts: a.counts, score: a.score, last_event_at: a.last };
+        }).sort((x, y) => y.score - x.score).slice(0, 100);
+        return jsonResponse({ success: true, suspicious: rows });
+      }
+
       case "list_security_events": {
         const { data, error } = await supabaseAdmin
           .from("security_events")

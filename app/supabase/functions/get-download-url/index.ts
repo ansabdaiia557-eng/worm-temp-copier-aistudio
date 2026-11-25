@@ -14,6 +14,7 @@ import {
   enforceRateLimit,
   logSecurityEvent,
   getClientIp,
+  checkClientIntegrity,
 } from "../_shared/utils.ts";
 
 serve(async (req: Request) => {
@@ -78,6 +79,22 @@ serve(async (req: Request) => {
         },
         403
       );
+    }
+
+    // 1b. Hourly per-user download cap + app/device integrity
+    const allowedHourly = await enforceRateLimit(supabaseAdmin, `dlh:${user.id}`, 60, 3600);
+    if (!allowedHourly && !isAdmin) {
+      await logSecurityEvent(supabaseAdmin, "RATE_LIMIT_EXCEEDED", "medium", user.id, clientIp, "get-download-url", "Hourly download limit exceeded");
+      return jsonResponse({ success: false, code: "RATE_LIMITED", error: "Too many downloads, try again later" }, 429);
+    }
+    const bodyEarly = await req.clone().json().catch(() => ({}));
+    const integrity = await checkClientIntegrity(
+      supabaseAdmin, user, profile, isAdmin,
+      String(bodyEarly?.device_id || ""), String(bodyEarly?.device_model || ""), String(bodyEarly?.app_sig || ""),
+      clientIp, "get-download-url"
+    );
+    if (!integrity.ok) {
+      return jsonResponse({ success: false, code: integrity.code, error: integrity.reason_en, error_ar: integrity.reason_ar }, 403);
     }
 
     // 2. Load server rules & check maintenance

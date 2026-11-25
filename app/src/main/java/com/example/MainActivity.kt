@@ -321,6 +321,17 @@ fun WormCopierApp(
                     )
                 }
 
+                // 1b. Access denied screen (banned / wrong device / tampered / no subscription)
+                if (!showSplash && serverGateStatus.isConfigured && !serverGateStatus.maintenance.isActive &&
+                    serverGateStatus.blockReasonCode in com.example.ui.components.ACCESS_DENIED_CODES &&
+                    !showAccountSheet
+                ) {
+                    com.example.ui.components.AccessDeniedOverlay(
+                        gateStatus = serverGateStatus,
+                        onOpenAccount = viewModel::openAccountSheet
+                    )
+                }
+
                 // 2. App Update Dialog (Mandatory or Dismissible Optional)
                 val appUpdate = serverGateStatus.appUpdate
                 if (!showSplash &&

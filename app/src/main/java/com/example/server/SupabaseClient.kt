@@ -41,13 +41,33 @@ class SupabaseClient(
             publishableKey != "CONFIGURE_IN_SECRETS"
     }
 
+    @android.annotation.SuppressLint("HardwareIds")
     private fun getOrCreateDeviceId(): String {
+        val aid = try {
+            android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID)
+        } catch (_: Throwable) { null }
+        if (!aid.isNullOrBlank() && aid != "9774d56d682e549c") return "aid-$aid"
         val prefs = context.getSharedPreferences("ans_device_meta", Context.MODE_PRIVATE)
         val existing = prefs.getString("device_id", null)
         if (!existing.isNullOrBlank()) return existing
         val created = UUID.randomUUID().toString()
         prefs.edit().putString("device_id", created).apply()
         return created
+    }
+
+    @Suppress("DEPRECATION")
+    private fun getAppSignatureSha256(): String {
+        return try {
+            val sigs = if (Build.VERSION.SDK_INT >= 28) {
+                val pi = context.packageManager.getPackageInfo(context.packageName, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
+                pi.signingInfo?.apkContentsSigners
+            } else {
+                context.packageManager.getPackageInfo(context.packageName, android.content.pm.PackageManager.GET_SIGNATURES).signatures
+            }
+            val first = sigs?.firstOrNull() ?: return ""
+            java.security.MessageDigest.getInstance("SHA-256").digest(first.toByteArray())
+                .joinToString("") { "%02x".format(it) }
+        } catch (_: Throwable) { "" }
     }
 
     // ==========================================================================
@@ -183,6 +203,7 @@ class SupabaseClient(
                 put("app_version_code", BuildConfig.VERSION_CODE)
                 put("app_version", BuildConfig.VERSION_NAME)
                 put("device_id", getOrCreateDeviceId())
+                put("app_sig", getAppSignatureSha256())
                 put("device_model", "${Build.MANUFACTURER} ${Build.MODEL}")
                 put("client_files", filesJson)
             }
@@ -469,7 +490,7 @@ class SupabaseClient(
                 ?: return@withContext Result.failure(IllegalStateException("Authentication required"))
 
             try {
-                val payload = JSONObject().put("content_id", contentId)
+                val payload = JSONObject().put("content_id", contentId).put("device_id", getOrCreateDeviceId()).put("app_sig", getAppSignatureSha256()).put("device_model", "${Build.MANUFACTURER} ${Build.MODEL}")
                 val req = Request.Builder()
                     .url("$baseUrl/functions/v1/get-download-url")
                     .addHeader("apikey", publishableKey)

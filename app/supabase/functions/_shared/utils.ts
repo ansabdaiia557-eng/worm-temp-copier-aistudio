@@ -416,3 +416,83 @@ export async function evaluateServerGate(
     app_update: latestAppUpdate,
   };
 }
+
+
+// ==============================================================================
+// CLIENT INTEGRITY: signed-app check + one device per account
+// ==============================================================================
+export const ALLOWED_APP_SIGS = [
+  "631e2c62058b87f8f63c24d93ab217a051500c9dd69d919468b37484195ed9e4",
+];
+
+export interface IntegrityResult {
+  ok: boolean;
+  code?: "TAMPERED_APP" | "DEVICE_MISMATCH" | "DEVICE_REQUIRED";
+  reason_ar?: string;
+  reason_en?: string;
+}
+
+export async function checkClientIntegrity(
+  supabaseAdmin: SupabaseClient,
+  user: User | null,
+  profile: Record<string, unknown> | null,
+  isAdmin: boolean,
+  deviceId: string,
+  deviceModel: string,
+  appSig: string,
+  ip: string,
+  endpoint: string
+): Promise<IntegrityResult> {
+  if (!user || isAdmin) return { ok: true };
+
+  let legacyAllowed = true;
+  try {
+    const { data } = await supabaseAdmin.from("server_settings").select("value").eq("key", "allow_legacy_clients").maybeSingle();
+    if (data && data.value === false) legacyAllowed = false;
+  } catch { /* default true */ }
+
+  const sig = (appSig || "").trim().toLowerCase();
+  if (!sig) {
+    if (legacyAllowed) return { ok: true };
+    await logSecurityEvent(supabaseAdmin, "TAMPERED_APP", "high", user.id, ip, endpoint, "Client did not send app signature", { reason: "missing_signature" });
+    return {
+      ok: false, code: "TAMPERED_APP",
+      reason_ar: "نسخة التطبيق غير معتمدة. نزّل النسخة الرسمية من القناة.",
+      reason_en: "This app build is not official. Download the official version.",
+    };
+  }
+  if (!ALLOWED_APP_SIGS.includes(sig)) {
+    await logSecurityEvent(supabaseAdmin, "TAMPERED_APP", "high", user.id, ip, endpoint, "Unofficial app signature", { sig_prefix: sig.slice(0, 12), device_id: deviceId.slice(0, 64) });
+    return {
+      ok: false, code: "TAMPERED_APP",
+      reason_ar: "تم اكتشاف نسخة معدلة من التطبيق. نزّل النسخة الرسمية من القناة.",
+      reason_en: "A modified copy of the app was detected. Download the official version.",
+    };
+  }
+
+  const dev = (deviceId || "").trim().slice(0, 128);
+  if (!dev) {
+    return {
+      ok: false, code: "DEVICE_REQUIRED",
+      reason_ar: "تعذر التعرف على الجهاز.", reason_en: "Could not identify the device.",
+    };
+  }
+  const locked = (profile?.device_id as string | null) || null;
+  if (!locked) {
+    await supabaseAdmin.from("user_profiles").update({
+      device_id: dev, device_model: deviceModel.slice(0, 128) || null, device_locked_at: new Date().toISOString(),
+    }).eq("id", user.id);
+    return { ok: true };
+  }
+  if (locked !== dev) {
+    await logSecurityEvent(supabaseAdmin, "DEVICE_MISMATCH", "high", user.id, ip, endpoint, "Account used on a different device", {
+      locked_device: locked.slice(0, 64), new_device: dev.slice(0, 64), new_model: deviceModel.slice(0, 64),
+    });
+    return {
+      ok: false, code: "DEVICE_MISMATCH",
+      reason_ar: "هذا الحساب مرتبط بجهاز آخر. تواصل مع المطور لإعادة ضبط الجهاز.",
+      reason_en: "This account is linked to another device. Contact the developer to reset the device.",
+    };
+  }
+  return { ok: true };
+}

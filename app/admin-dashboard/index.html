@@ -213,6 +213,7 @@
 
         <div class="nav-group-label" data-i18n="nav_users">المستخدمون والاشتراكات</div>
         <button class="nav-btn" data-sec="sec-users" onclick="switchSection('sec-users', this)">👥 إدارة المستخدمين والحظر</button>
+        <button class="nav-btn" data-sec="sec-suspicious" onclick="switchSection('sec-suspicious', this)">🚩 المشبوهين</button>
         <button class="nav-btn" data-sec="sec-codes" onclick="switchSection('sec-codes', this)">🔑 أكواد التفعيل</button>
         <button class="nav-btn" data-sec="sec-subs" onclick="switchSection('sec-subs', this)">💳 الاشتراكات النشطة</button>
 
@@ -612,6 +613,13 @@
         </section>
 
         <!-- 14. SECURITY EVENTS -->
+        <section class="section" id="sec-suspicious">
+            <div class="card">
+                <div class="card-header"><div class="card-title">🚩 المستخدمين المشبوهين (آخر 7 أيام)</div><button class="btn btn-outline btn-sm" onclick="loadSuspicious()">تحديث</button></div>
+                <div class="table-wrap"><table><thead><tr><th>المستخدم</th><th>النشاط</th><th>النقاط</th><th>آخر حدث</th><th>إجراء</th></tr></thead><tbody id="suspiciousBody"></tbody></table></div>
+            </div>
+        </section>
+
         <section class="section" id="sec-security">
             <div class="card">
                 <div class="card-header"><div class="card-title">🛡️ سجل الأحداث الأمنية والتنبيهات</div><button class="btn btn-outline btn-sm" onclick="loadSecurityEvents()">تحديث</button></div>
@@ -674,6 +682,7 @@ function switchSection(id, btnEl) {
         if (id === 'sec-apk') loadAppUpdates();
         if (id === 'sec-audit') loadAuditLogs();
         if (id === 'sec-security') loadSecurityEvents();
+        if (id === 'sec-suspicious') loadSuspicious();
     }
 }
 
@@ -864,6 +873,7 @@ async function loadUsers() {
                     ${u.is_banned
                         ? `<button class="btn btn-sm" onclick="unbanUser('${u.id}')">فك الحظر</button>`
                         : `<button class="btn btn-danger btn-sm" onclick="banUserPrompt('${u.id}')">حظر</button>`}
+                    <button class="btn btn-outline btn-sm" onclick="resetDevice('${u.id}')">${u.device_id ? 'reset device' : 'no device'}</button>
                     <button class="btn btn-outline btn-sm" onclick="promoteUserRole('${u.id}')">تغيير الدور</button>
                 </td>
             </tr>`;
@@ -1340,6 +1350,29 @@ async function loadSecurityEvents() {
             <td class="mono" style="font-size:10px;">${escapeHtml(ev.created_at)}</td>
         </tr>`).join('');
     } catch (e) { showToast(e.message, true); }
+}
+
+const SUSP_LABELS = { INVALID_ACTIVATION_CODE: 'أكواد غلط', DEVICE_MISMATCH: 'جهاز تاني', TAMPERED_APP: 'تطبيق معدل', RATE_LIMIT_EXCEEDED: 'تحميل زيادة', BANNED_DOWNLOAD_ATTEMPT: 'محظور حاول يحمل', TELEGRAM_LOGIN_FAILED: 'فشل دخول تيليجرام' };
+async function loadSuspicious() {
+    try {
+        const { suspicious } = await callAdminApi('list_suspicious');
+        document.getElementById('suspiciousBody').innerHTML = suspicious.length ? suspicious.map(r => `<tr>
+            <td>${escapeHtml(r.display_name || '')}<br><span class="mono" style="font-size:10px;">${escapeHtml(r.telegram_username ? '@' + r.telegram_username : '')} ${escapeHtml(r.telegram_user_id || '')}</span></td>
+            <td>${Object.entries(r.counts).map(([k, v]) => `<span class="badge badge-yellow">${escapeHtml(SUSP_LABELS[k] || k)}: ${v}</span>`).join(' ')}</td>
+            <td class="mono">${r.score}</td>
+            <td class="mono" style="font-size:10px;">${escapeHtml(r.last_event_at)}</td>
+            <td>${r.is_banned ? '<span class="badge badge-red">محظور</span>' : `<button class="btn btn-danger btn-sm" onclick="banUserOneTap('${r.user_id}')">حظر</button>`}
+                <button class="btn btn-outline btn-sm" onclick="resetDevice('${r.user_id}')">إعادة ضبط الجهاز</button></td>
+        </tr>`).join('') : '<tr><td colspan="5">مفيش نشاط مشبوه 👍</td></tr>';
+    } catch (e) { showToast(e.message, true); }
+}
+async function banUserOneTap(userId) {
+    if (!confirm('تحظر المستخدم ده؟')) return;
+    try { await callAdminApi('ban_user', { user_id: userId, reason: 'نشاط مشبوه' }); showToast('تم الحظر'); loadSuspicious(); } catch (e) { showToast(e.message, true); }
+}
+async function resetDevice(userId) {
+    if (!confirm('تعيد ضبط جهاز المستخدم؟ أول جهاز يفتح الحساب هيتربط.')) return;
+    try { await callAdminApi('reset_device', { user_id: userId }); showToast('تم إعادة ضبط الجهاز'); if (typeof loadUsers === 'function') loadUsers(); } catch (e) { showToast(e.message, true); }
 }
 
 async function runEdgeDiagnostics() {

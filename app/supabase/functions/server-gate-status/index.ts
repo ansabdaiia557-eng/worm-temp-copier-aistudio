@@ -14,6 +14,7 @@ import {
   getAdminClient,
   getClientIp,
   jsonResponse,
+  checkClientIntegrity,
 } from "../_shared/utils.ts";
 
 serve(async (req: Request) => {
@@ -24,7 +25,7 @@ serve(async (req: Request) => {
   try {
     const supabaseAdmin = getAdminClient();
     const ip = getClientIp(req);
-    const { user, profile } = await authenticateRequest(req, supabaseAdmin);
+    const { user, profile, isAdmin: isAdminUser } = await authenticateRequest(req, supabaseAdmin);
 
     const allowed = await enforceRateLimit(
       supabaseAdmin,
@@ -68,6 +69,29 @@ serve(async (req: Request) => {
       clientFiles,
       clientVersionCode
     );
+
+    const integrity = await checkClientIntegrity(
+      supabaseAdmin,
+      user,
+      profile,
+      isAdminUser,
+      String(body?.device_id || ""),
+      String(body?.device_model || ""),
+      String(body?.app_sig || ""),
+      ip,
+      "server-gate-status"
+    );
+    if (!integrity.ok) {
+      return jsonResponse({
+        ...gateResult,
+        can_execute_copy: false,
+        block_reason_code: integrity.code,
+        block_reason_ar: integrity.reason_ar,
+        block_reason_en: integrity.reason_en,
+        files: [],
+        outdated_file_ids: [],
+      }, 200);
+    }
 
     return jsonResponse(gateResult, 200);
   } catch (err: unknown) {
