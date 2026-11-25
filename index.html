@@ -848,7 +848,7 @@ async function loadUsers() {
         tbody.innerHTML = users.map(u => {
             const sub = u.latest_subscription;
             return `<tr>
-                <td><div><strong>${escapeHtml(u.email || u.display_name || '-')}</strong></div><div class="mono" style="font-size:10px; color:var(--text-secondary);">${escapeHtml(u.id)}</div></td>
+                <td><div><strong>${escapeHtml(u.display_name || '-')}</strong>${u.telegram_username ? ' <span class="mono">@' + escapeHtml(u.telegram_username) + '</span>' : ''}</div><div class="mono" style="font-size:11px;">Telegram ID: ${escapeHtml(String(u.telegram_user_id || '-'))}</div><div class="mono" style="font-size:10px; color:var(--text-secondary);">${escapeHtml(u.id)}</div></td>
                 <td><span class="badge badge-cyan">${escapeHtml(u.role)}</span></td>
                 <td>${u.is_banned ? `<span class="badge badge-red">محظور: ${escapeHtml(u.ban_reason || '')}</span>` : '<span class="badge badge-green">نشط</span>'}</td>
                 <td>${u.telegram_verified ? '<span class="badge badge-green">موثّق ✓</span>' : '<span class="badge badge-yellow">غير موثّق</span>'}</td>
