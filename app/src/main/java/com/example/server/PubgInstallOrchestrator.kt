@@ -3,7 +3,10 @@ package com.example.server
 import android.content.Context
 import android.content.Intent
 import com.example.content.ContentRepository
+import com.example.autodelete.AutoDeleteWorker
+import com.example.data.AppDatabase
 import com.example.data.AppSettings
+import com.example.data.ScheduledDeletionEntity
 import com.example.data.ContentItem
 import com.example.data.GameEditionInfo
 import com.example.data.GameEditionKey
@@ -341,6 +344,43 @@ class PubgInstallOrchestrator(
                         9,
                         if (isAr) "فشل نسخ ${item.targetFileName}: ${transferRes.message}" else "Copy failed for ${item.targetFileName}: ${transferRes.message}",
                         onStateUpdate
+                    )
+                }
+
+                // Auto-delete: schedule removal of ONLY the file this app just copied.
+                if (settings.autoDeleteEnabled) {
+                    val copyId = transferRes.uniqueCopyId ?: "copy_${System.currentTimeMillis()}_${item.id}"
+                    val targetPath = transferRes.targetFullPath ?: "$effectiveDestDir/${item.targetFileName}"
+                    val retentionMinutes = settings.defaultRetentionMinutes.coerceIn(1, 3)
+                    val nowMs = System.currentTimeMillis()
+                    val delayMs = retentionMinutes * 60 * 1000L
+                    val canonical = try {
+                        File(targetPath).canonicalPath
+                    } catch (_: Throwable) {
+                        targetPath
+                    }
+                    AppDatabase.getInstance(context).scheduledDeletionDao().insert(
+                        ScheduledDeletionEntity(
+                            uniqueCopyId = copyId,
+                            fileName = item.targetFileName,
+                            destinationPath = targetPath,
+                            destinationTreeUri = null,
+                            targetFileUri = transferRes.targetFileUri,
+                            fileSize = cachedFile.length(),
+                            expectedSha256 = transferRes.targetHash ?: transferRes.originalHash,
+                            gameEditionName = selectedEdition.title,
+                            durationMinutes = retentionMinutes,
+                            copiedAtMillis = nowMs,
+                            deleteAtMillis = nowMs + delayMs,
+                            isDeleted = false,
+                            cancelled = false,
+                            canonicalPath = canonical
+                        )
+                    )
+                    AutoDeleteWorker.scheduleDeletion(
+                        context = context,
+                        uniqueCopyId = copyId,
+                        delayMillis = delayMs
                     )
                 }
 

@@ -108,6 +108,7 @@ fun WormCopierApp(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val shizukuStatus by viewModel.shizukuStatus.collectAsStateWithLifecycle()
     val historyList by viewModel.operationHistory.collectAsStateWithLifecycle()
+    val scheduledDeletions by viewModel.scheduledDeletions.collectAsStateWithLifecycle()
     val usageSessions by viewModel.usageSessions.collectAsStateWithLifecycle()
     val bannerMessage by viewModel.bannerMessage.collectAsStateWithLifecycle()
 
@@ -228,6 +229,13 @@ fun WormCopierApp(
                                     isGateChecking = isGateChecking,
                                     operationHistory = historyList,
                                     lastDurationMs = usageSessions.firstOrNull()?.durationMs,
+                                    autoDeleteEnabled = settings.autoDeleteEnabled,
+                                    retentionMinutes = settings.defaultRetentionMinutes,
+                                    pendingDeletions = scheduledDeletions.size,
+                                    onSetAutoDelete = { enabled, minutes ->
+                                        viewModel.setAutoDeleteEnabled(enabled)
+                                        if (enabled) viewModel.setDefaultRetentionMinutes(minutes)
+                                    },
                                     onConnectShizuku = viewModel::connectOrRequestShizukuPermission,
                                     onRefreshShizuku = viewModel::refreshShizuku,
                                     onSelectEdition = viewModel::selectGameEdition,

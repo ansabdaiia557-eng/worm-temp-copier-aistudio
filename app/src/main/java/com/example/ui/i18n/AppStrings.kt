@@ -266,7 +266,14 @@ data class AppStrings(
     val updateCheckFailedMsg: String,
     val settingsAppInfoTitle: String,
     val settingsVersionLabel: String,
-    val settingsLanguageValue: String
+    val settingsLanguageValue: String,
+    val autoDeleteHomeTitle: String,
+    val autoDeleteHomeHint: String,
+    val autoDeleteOff: String,
+    val autoDelete1Min: String,
+    val autoDelete2Min: String,
+    val autoDelete3Min: String,
+    val autoDeletePendingLabel: String
 )
 
 val ArabicStrings = AppStrings(
@@ -516,7 +523,14 @@ val ArabicStrings = AppStrings(
     updateCheckFailedMsg = "تعذر الاتصال بالسيرفر للتحقق من التحديثات.",
     settingsAppInfoTitle = "معلومات التطبيق",
     settingsVersionLabel = "الإصدار",
-    settingsLanguageValue = "العربية"
+    settingsLanguageValue = "العربية",
+    autoDeleteHomeTitle = "الحذف التلقائي بعد النسخ",
+    autoDeleteHomeHint = "يحذف الملف الذي نسخه التطبيق فقط بعد المدة المختارة.",
+    autoDeleteOff = "إيقاف",
+    autoDelete1Min = "دقيقة",
+    autoDelete2Min = "دقيقتان",
+    autoDelete3Min = "3 دقائق",
+    autoDeletePendingLabel = "ملفات مجدولة للحذف:"
 )
 
 val EnglishStrings = AppStrings(
@@ -766,7 +780,14 @@ val EnglishStrings = AppStrings(
     updateCheckFailedMsg = "Could not reach the server to check for updates.",
     settingsAppInfoTitle = "App info",
     settingsVersionLabel = "Version",
-    settingsLanguageValue = "English"
+    settingsLanguageValue = "English",
+    autoDeleteHomeTitle = "Auto-delete after copy",
+    autoDeleteHomeHint = "Deletes only the file this app copied, after the chosen time.",
+    autoDeleteOff = "Off",
+    autoDelete1Min = "1 min",
+    autoDelete2Min = "2 min",
+    autoDelete3Min = "3 min",
+    autoDeletePendingLabel = "Files scheduled for deletion:"
 )
 
 val LocalAppStrings = staticCompositionLocalOf { ArabicStrings }

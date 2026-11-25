@@ -77,6 +77,10 @@ fun HomeScreen(
     isGateChecking: Boolean,
     operationHistory: List<OperationHistoryEntity>,
     lastDurationMs: Long?,
+    autoDeleteEnabled: Boolean,
+    retentionMinutes: Int,
+    pendingDeletions: Int,
+    onSetAutoDelete: (enabled: Boolean, minutes: Int) -> Unit,
     onConnectShizuku: () -> Unit,
     onRefreshShizuku: () -> Unit,
     onSelectEdition: (GameEditionInfo) -> Unit,
@@ -215,6 +219,44 @@ fun HomeScreen(
                     fontSize = 10.sp,
                     color = TextSecondary
                 )
+            }
+        }
+
+        // Auto-delete presets (1 / 2 / 3 minutes)
+        GamingCard {
+            Text(s.autoDeleteHomeTitle, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Spacer(Modifier.height(4.dp))
+            Text(s.autoDeleteHomeHint, fontSize = 12.sp, color = TextSecondary)
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val options = listOf(
+                    Triple(s.autoDeleteOff, false, 0),
+                    Triple(s.autoDelete1Min, true, 1),
+                    Triple(s.autoDelete2Min, true, 2),
+                    Triple(s.autoDelete3Min, true, 3)
+                )
+                options.forEach { (label, enabled, minutes) ->
+                    val selected = if (!enabled) !autoDeleteEnabled
+                    else autoDeleteEnabled && retentionMinutes.coerceIn(1, 3) == minutes
+                    if (selected) {
+                        Button(
+                            onClick = { onSetAutoDelete(enabled, minutes) },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonGreen, contentColor = ObsidianDark),
+                            modifier = Modifier.testTag("autodelete_$minutes")
+                        ) { Text(label, fontSize = 12.sp, maxLines = 1) }
+                    } else {
+                        OutlinedButton(
+                            onClick = { onSetAutoDelete(enabled, minutes) },
+                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 10.dp),
+                            modifier = Modifier.testTag("autodelete_$minutes")
+                        ) { Text(label, fontSize = 12.sp, maxLines = 1) }
+                    }
+                }
+            }
+            if (pendingDeletions > 0) {
+                Spacer(Modifier.height(8.dp))
+                Text("${s.autoDeletePendingLabel} $pendingDeletions", fontSize = 12.sp, color = WarningOrange)
             }
         }
 
