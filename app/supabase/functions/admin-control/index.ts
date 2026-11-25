@@ -140,6 +140,8 @@ serve(async (req: Request) => {
           return (
             String(p.email || "").toLowerCase().includes(search) ||
             String(p.display_name || "").toLowerCase().includes(search) ||
+            String(p.telegram_user_id || "").includes(search) ||
+            String(p.telegram_username || "").toLowerCase().includes(search) ||
             String(p.id || "").toLowerCase().includes(search)
           );
         });
