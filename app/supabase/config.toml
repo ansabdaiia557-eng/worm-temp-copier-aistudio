@@ -20,3 +20,9 @@ verify_jwt = false
 
 [functions.record-operation-audit]
 verify_jwt = false
+
+[functions.telegram-bot]
+verify_jwt = false
+
+[functions.telegram-login]
+verify_jwt = false

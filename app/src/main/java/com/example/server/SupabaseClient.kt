@@ -54,80 +54,36 @@ class SupabaseClient(
     // AUTHENTICATION (Email & Password + Token Refresh)
     // ==========================================================================
 
-    suspend fun signInWithEmail(email: String, password: String): Result<AuthSessionState> =
+    suspend fun signInWithTelegramCode(code: String): Result<AuthSessionState> =
         withContext(Dispatchers.IO) {
             if (!isConfigured()) {
-                return@withContext Result.failure(IllegalStateException("Supabase Publishable Key is not configured in Secrets"))
+                return@withContext Result.failure(IllegalStateException("Server key is not configured"))
             }
             try {
-                val payload = JSONObject().apply {
-                    put("email", email.trim())
-                    put("password", password)
-                }
+                val payload = JSONObject().apply { put("code", code.trim()) }
                 val req = Request.Builder()
-                    .url("$baseUrl/auth/v1/token?grant_type=password")
+                    .url("$baseUrl/functions/v1/telegram-login")
                     .addHeader("apikey", publishableKey)
+                    .addHeader("Authorization", "Bearer $publishableKey")
                     .addHeader("Content-Type", "application/json")
                     .post(payload.toString().toRequestBody(jsonMedia))
                     .build()
-
                 httpClient.newCall(req).execute().use { resp ->
                     val raw = resp.body?.string().orEmpty()
                     val json = JSONObject(raw.ifBlank { "{}" })
-                    if (!resp.isSuccessful) {
-                        val err = json.optString("error_description")
-                            .ifBlank { json.optString("msg") }
-                            .ifBlank { json.optString("error") }
-                            .ifBlank { "Sign-in failed (${resp.code})" }
-                        return@withContext Result.failure(IllegalStateException(err))
-                    }
-                    val session = parseAuthSession(json, email.trim())
-                    sessionStore.saveSession(session)
-                    Result.success(session)
-                }
-            } catch (t: Throwable) {
-                Result.failure(t)
-            }
-        }
-
-    suspend fun signUpWithEmail(email: String, password: String, displayName: String): Result<AuthSessionState> =
-        withContext(Dispatchers.IO) {
-            if (!isConfigured()) {
-                return@withContext Result.failure(IllegalStateException("Supabase Publishable Key is not configured in Secrets"))
-            }
-            try {
-                val payload = JSONObject().apply {
-                    put("email", email.trim())
-                    put("password", password)
-                    put("data", JSONObject().apply {
-                        put("display_name", displayName.trim().ifBlank { email.substringBefore("@") })
-                    })
-                }
-                val req = Request.Builder()
-                    .url("$baseUrl/auth/v1/signup")
-                    .addHeader("apikey", publishableKey)
-                    .addHeader("Content-Type", "application/json")
-                    .post(payload.toString().toRequestBody(jsonMedia))
-                    .build()
-
-                httpClient.newCall(req).execute().use { resp ->
-                    val raw = resp.body?.string().orEmpty()
-                    val json = JSONObject(raw.ifBlank { "{}" })
-                    if (!resp.isSuccessful) {
-                        val err = json.optString("msg")
-                            .ifBlank { json.optString("error_description") }
-                            .ifBlank { json.optString("error") }
-                            .ifBlank { "Registration failed (${resp.code})" }
-                        return@withContext Result.failure(IllegalStateException(err))
-                    }
-                    val accessToken = json.optString("access_token")
-                    if (accessToken.isBlank()) {
-                        // Email confirmation required by project settings
+                    if (!resp.isSuccessful || !json.optBoolean("success", false)) {
                         return@withContext Result.failure(
-                            IllegalStateException("Account created. Please confirm your email address, then sign in.")
+                            IllegalStateException(json.optString("code").ifBlank { "LOGIN_FAILED" })
                         )
                     }
-                    val session = parseAuthSession(json, email.trim())
+                    val userObj = json.optJSONObject("user")
+                    val session = AuthSessionState(
+                        accessToken = json.optString("access_token"),
+                        refreshToken = json.optString("refresh_token"),
+                        userId = userObj?.optString("id").orEmpty(),
+                        email = userObj?.optString("email").orEmpty(),
+                        expiresAtEpochSec = (System.currentTimeMillis() / 1000L) + json.optLong("expires_in", 3600L)
+                    )
                     sessionStore.saveSession(session)
                     Result.success(session)
                 }

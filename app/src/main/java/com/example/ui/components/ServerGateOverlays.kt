@@ -1,5 +1,7 @@
 package com.example.ui.components
 
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
@@ -244,18 +246,15 @@ fun AccountAuthAndSubscriptionDialog(
     authSession: AuthSessionState,
     gateStatus: ServerGateStatus,
     isBusy: Boolean,
-    onSignIn: (String, String) -> Unit,
-    onSignUp: (String, String, String) -> Unit,
+    onCodeLogin: (String) -> Unit,
     onSignOut: () -> Unit,
     onRedeemCode: (String) -> Unit,
     onDismiss: () -> Unit,
     bannerMessage: Pair<String, Boolean>? = null
 ) {
     val strings = LocalAppStrings.current
-    var isSignUpMode by remember { mutableStateOf(false) }
-    var email by remember(authSession.email) { mutableStateOf(authSession.email) }
-    var password by remember { mutableStateOf("") }
-    var displayName by remember { mutableStateOf("") }
+    var loginCode by remember { mutableStateOf("") }
+    val context = LocalContext.current
     var activationCode by remember { mutableStateOf("") }
 
     Dialog(
@@ -296,7 +295,7 @@ fun AccountAuthAndSubscriptionDialog(
                         )
                         Text(
                             text = if (!authSession.isLoggedIn) {
-                                if (isSignUpMode) strings.authTitleSignUp else strings.authTitleSignIn
+                                strings.authTitleSignIn
                             } else {
                                 strings.btnAccountAndPlan
                             },
@@ -359,46 +358,43 @@ fun AccountAuthAndSubscriptionDialog(
                 }
 
                 if (!authSession.isLoggedIn) {
-                    if (isSignUpMode) {
-                        OutlinedTextField(
-                            value = displayName,
-                            onValueChange = { displayName = it },
-                            label = { Text(strings.authDisplayNameLabel) },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("auth_display_name_input")
-                        )
-                    }
-                    OutlinedTextField(
-                        value = email,
-                        onValueChange = { email = it },
-                        label = { Text(strings.authEmailLabel) },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("auth_email_input")
+                    Text(
+                        text = strings.authCodeInstructions,
+                        color = TextSecondary,
+                        fontSize = 13.sp
                     )
-                    OutlinedTextField(
-                        value = password,
-                        onValueChange = { password = it },
-                        label = { Text(strings.authPasswordLabel) },
-                        visualTransformation = PasswordVisualTransformation(),
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("auth_password_input")
-                    )
-
                     Button(
                         onClick = {
-                            if (isSignUpMode) {
-                                onSignUp(email, password, displayName)
-                            } else {
-                                onSignIn(email, password)
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/Kharbash0bot?start=app")).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             }
+                            runCatching { context.startActivity(intent) }
                         },
-                        enabled = !isBusy && email.isNotBlank() && password.length >= 6,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("btn_open_telegram_bot"),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = TacticalCyan,
+                            contentColor = ObsidianDark
+                        )
+                    ) {
+                        Text(text = strings.btnOpenTelegramBot, fontWeight = FontWeight.Bold)
+                    }
+                    OutlinedTextField(
+                        value = loginCode,
+                        onValueChange = { v -> loginCode = v.filter { it.isDigit() }.take(6) },
+                        label = { Text(strings.authCodeLabel) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("auth_code_input")
+                    )
+                    Button(
+                        onClick = { onCodeLogin(loginCode) },
+                        enabled = !isBusy && loginCode.length == 6,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp)
@@ -417,22 +413,7 @@ fun AccountAuthAndSubscriptionDialog(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                         }
-                        Text(
-                            text = if (isSignUpMode) strings.btnCreateAccount else strings.btnSignIn,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    TextButton(
-                        onClick = { isSignUpMode = !isSignUpMode },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("btn_toggle_auth_mode")
-                    ) {
-                        Text(
-                            text = if (isSignUpMode) strings.btnSwitchToSignIn else strings.btnSwitchToSignUp,
-                            color = TacticalCyan
-                        )
+                        Text(text = strings.btnSignIn, fontWeight = FontWeight.Bold)
                     }
                 } else {
                     // Signed-in Profile Summary
@@ -452,8 +433,8 @@ fun AccountAuthAndSubscriptionDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = gateStatus.user?.displayName?.ifBlank { authSession.email }
-                                        ?: authSession.email,
+                                    text = gateStatus.user?.displayName?.ifBlank { "Telegram" }
+                                        ?: "Telegram",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = TextPrimary
@@ -472,12 +453,6 @@ fun AccountAuthAndSubscriptionDialog(
                                     )
                                 }
                             }
-                            Text(
-                                text = authSession.email,
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontSize = 12.sp,
-                                color = TextSecondary
-                            )
                         }
                     }
 

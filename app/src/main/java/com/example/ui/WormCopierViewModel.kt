@@ -230,36 +230,23 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun signIn(email: String, password: String) {
+    fun signInWithCode(code: String) {
         viewModelScope.launch {
             _isAuthBusy.value = true
-            val res = supabaseClient.signInWithEmail(email, password)
+            val res = supabaseClient.signInWithTelegramCode(code)
             _isAuthBusy.value = false
+            val ar = settings.value.languageCode == "ar"
             res.onSuccess {
                 refreshServerGate(silent = false)
-                showBanner(
-                    if (settings.value.languageCode == "ar") "تم تسجيل الدخول بنجاح" else "Signed in successfully",
-                    isError = false
-                )
+                showBanner(if (ar) "تم تسجيل الدخول بنجاح" else "Signed in successfully", isError = false)
             }.onFailure { err ->
-                showBanner(err.localizedMessage ?: "Sign in failed", isError = true)
-            }
-        }
-    }
-
-    fun signUp(email: String, password: String, displayName: String) {
-        viewModelScope.launch {
-            _isAuthBusy.value = true
-            val res = supabaseClient.signUpWithEmail(email, password, displayName)
-            _isAuthBusy.value = false
-            res.onSuccess {
-                refreshServerGate(silent = false)
-                showBanner(
-                    if (settings.value.languageCode == "ar") "تم إنشاء الحساب وتسجيل الدخول" else "Account created & signed in",
-                    isError = false
-                )
-            }.onFailure { err ->
-                showBanner(err.localizedMessage ?: "Sign up failed", isError = true)
+                val msg = when (err.message) {
+                    "BAD_CODE" -> if (ar) "الكود غير صحيح أو منتهي. اطلب كود جديد من البوت." else "Wrong or expired code. Get a new one from the bot."
+                    "RATE_LIMITED" -> if (ar) "محاولات كثيرة. انتظر قليلاً." else "Too many attempts. Wait a bit."
+                    "ACCOUNT_BANNED" -> if (ar) "هذا الحساب محظور." else "This account is banned."
+                    else -> if (ar) "تعذر تسجيل الدخول. تحقق من الاتصال وحاول مرة أخرى." else "Sign-in failed. Check your connection and retry."
+                }
+                showBanner(msg, isError = true)
             }
         }
     }
