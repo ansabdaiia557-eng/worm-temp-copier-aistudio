@@ -34,3 +34,38 @@ export async function notifyChannel(html: string): Promise<boolean> {
     return false;
   }
 }
+
+// Posts an "update" notification and deletes the previous update post, so only the latest stays visible.
+// Never touches other channel posts (only the id stored under server_settings.last_update_post).
+export async function notifyUpdate(admin: any, html: string): Promise<{ ok: boolean; error?: string; message_id?: number }> {
+  try {
+    const token = Deno.env.get("TELEGRAM_BOT_TOKEN");
+    const chat = Deno.env.get("TELEGRAM_CHANNEL_ID") || "@Kharbash_anas";
+    if (!token) return { ok: false, error: "no token" };
+    const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chat, text: html, parse_mode: "HTML", disable_web_page_preview: true }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!j?.ok) {
+      console.error("notifyUpdate failed", JSON.stringify(j));
+      return { ok: false, error: String(j?.description || r.status) };
+    }
+    const newId = j.result.message_id as number;
+    const { data: prev } = await admin.from("server_settings").select("value").eq("key", "last_update_post").maybeSingle();
+    const prevId = prev?.value?.message_id;
+    if (prevId && prevId !== newId) {
+      await fetch(`https://api.telegram.org/bot${token}/deleteMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chat, message_id: prevId }),
+      }).catch(() => {});
+    }
+    await admin.from("server_settings").upsert({ key: "last_update_post", value: { message_id: newId }, description: "Last auto update post in the channel", updated_at: new Date().toISOString() });
+    return { ok: true, message_id: newId };
+  } catch (e) {
+    console.error("notifyUpdate error", e);
+    return { ok: false, error: String(e) };
+  }
+}

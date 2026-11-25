@@ -14,7 +14,7 @@ import {
   logSecurityEvent,
   getClientIp,
 } from "../_shared/utils.ts";
-import { escHtml, notifyChannel } from "../_shared/tg.ts";
+import { escHtml, notifyUpdate } from "../_shared/tg.ts";
 import { processReferralReward } from "../_shared/referral.ts";
 
 const SYSTEM_STATUS_ID = "00000000-0000-0000-0000-000000000001";
@@ -478,7 +478,7 @@ serve(async (req: Request) => {
 
         await writeAudit("UPLOAD_SERVER_FILE", "content_item", inserted.id, { title, version: inserted.version });
         if (inserted.is_published) {
-          await notifyChannel(
+          await notifyUpdate(supabaseAdmin, 
             `🆕 <b>ملف جديد</b>\n\n📦 ${escHtml(String(inserted.title || target_filename || ""))}\n🏷 الإصدار: ${escHtml(String(inserted.version || ""))}\n\nافتح البرنامج عشان ينزل 📲`
           );
         }
@@ -544,7 +544,7 @@ serve(async (req: Request) => {
         });
 
         await writeAudit("REPLACE_FILE_VERSION", "content_item", itemId, { nextVersion, nextVerCode });
-        await notifyChannel(
+        await notifyUpdate(supabaseAdmin, 
           `🔄 <b>تحديث ملف</b>\n\n📦 ${escHtml(String(updated?.title || oldItem.title || body.target_filename))}\n🏷 الإصدار: ${escHtml(nextVersion)}\n\nافتح البرنامج عشان ينزل التحديث 📲`
         );
         return jsonResponse({ success: true, item: updated });
@@ -601,7 +601,7 @@ serve(async (req: Request) => {
         await writeAudit(publish ? "PUBLISH_FILE" : "UNPUBLISH_FILE", "content_item", itemId, { is_published: publish });
         if (publish) {
           const { data: it } = await supabaseAdmin.from("content_items").select("title, version").eq("id", itemId).maybeSingle();
-          await notifyChannel(
+          await notifyUpdate(supabaseAdmin, 
             `🆕 <b>ملف جديد</b>\n\n📦 ${escHtml(String(it?.title || ""))}\n🏷 الإصدار: ${escHtml(String(it?.version || ""))}\n\nافتح البرنامج عشان ينزل 📲`
           );
         }
@@ -699,7 +699,7 @@ serve(async (req: Request) => {
         if (error) throw error;
 
         await writeAudit("START_MAINTENANCE", "system_status", SYSTEM_STATUS_ID, { reasonAr, durationMins, endsAt });
-        await notifyChannel(
+        await notifyUpdate(supabaseAdmin, 
           `⚠️ <b>البرنامج متوقف مؤقتًا</b>\n\n📝 السبب: ${escHtml(reasonAr)}` +
           (durationMins ? `\n⏳ المدة المتوقعة: ${durationMins} دقيقة` : "") +
           `\n\nهنبلغكم أول ما يرجع يشتغل 🙏`
@@ -768,7 +768,7 @@ serve(async (req: Request) => {
           .lte("starts_at", nowIso);
 
         await writeAudit("INSTANT_RESUME", "system_status", SYSTEM_STATUS_ID, { resumed_at: nowIso, resumed_by: user.id });
-        await notifyChannel(`✅ <b>البرنامج رجع يشتغل</b>\n\nتقدروا تستخدموه دلوقتي 🚀`);
+        await notifyUpdate(supabaseAdmin, `✅ <b>البرنامج رجع يشتغل</b>\n\nتقدروا تستخدموه دلوقتي 🚀`);
         return jsonResponse({ success: true, resumed_at: nowIso });
       }
 
@@ -884,6 +884,14 @@ serve(async (req: Request) => {
           chat = await fetch(`https://api.telegram.org/bot${tok}/getChat?chat_id=${encodeURIComponent(chan)}`).then((r) => r.json()).catch((e) => String(e));
         }
         return jsonResponse({ success: true, has_token: Boolean(tok), channel: chan, me, chat });
+      }
+
+      case "notify_test": {
+        const r = await notifyUpdate(
+          supabaseAdmin,
+          `🔄 <b>تحديث ملف</b>\n\n📦 ${escHtml(String(body.title || "ملف رفاعي V10"))}\n🏷 الإصدار: ${escHtml(String(body.version || "V10"))}\n\nافتح البرنامج عشان ينزل التحديث 📲`
+        );
+        return jsonResponse({ success: r.ok, result: r });
       }
 
       case "reset_device": {
