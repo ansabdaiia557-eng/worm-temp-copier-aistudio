@@ -28,7 +28,7 @@ serve(async (req: Request) => {
     const { user, isAdmin, isSuperAdmin } = await authenticateRequest(req, supabaseAdmin);
 
     if (!user) {
-      return jsonResponse({ success: false, error: "Authentication required" }, 401);
+      return jsonResponse({ success: false, error: "لازم تسجل دخول" }, 401);
     }
 
     if (!isAdmin) {
@@ -41,7 +41,7 @@ serve(async (req: Request) => {
         "admin-control",
         "Non-admin user attempted to invoke admin-control endpoint"
       );
-      return jsonResponse({ success: false, error: "Forbidden: Admin privileges required" }, 403);
+      return jsonResponse({ success: false, error: "ممنوع: تحتاج صلاحيات الأدمن" }, 403);
     }
 
     const body = await req.json().catch(() => ({}));
@@ -157,8 +157,8 @@ serve(async (req: Request) => {
       case "ban_user": {
         const targetId = String(body.user_id || "");
         const reason = String(body.reason || "Banned by administrator").trim();
-        if (!targetId) return jsonResponse({ success: false, error: "Missing user_id" }, 400);
-        if (targetId === user.id) return jsonResponse({ success: false, error: "Cannot ban your own admin account" }, 400);
+        if (!targetId) return jsonResponse({ success: false, error: "معرّف المستخدم ناقص" }, 400);
+        if (targetId === user.id) return jsonResponse({ success: false, error: "لا يمكنك حظر حساب الأدمن الخاص بك" }, 400);
 
         const { error } = await supabaseAdmin
           .from("user_profiles")
@@ -184,7 +184,7 @@ serve(async (req: Request) => {
 
       case "unban_user": {
         const targetId = String(body.user_id || "");
-        if (!targetId) return jsonResponse({ success: false, error: "Missing user_id" }, 400);
+        if (!targetId) return jsonResponse({ success: false, error: "معرّف المستخدم ناقص" }, 400);
 
         const { error } = await supabaseAdmin
           .from("user_profiles")
@@ -225,7 +225,7 @@ serve(async (req: Request) => {
 
       case "get_user_activity": {
         const targetId = String(body.user_id || "");
-        if (!targetId) return jsonResponse({ success: false, error: "Missing user_id" }, 400);
+        if (!targetId) return jsonResponse({ success: false, error: "معرّف المستخدم ناقص" }, 400);
 
         const [logsRes, sessionsRes, subsRes] = await Promise.all([
           supabaseAdmin.from("user_activity_logs").select("*").eq("user_id", targetId).order("created_at", { ascending: false }).limit(50),
@@ -263,7 +263,7 @@ serve(async (req: Request) => {
         const expiresAt = body.expires_at ? String(body.expires_at) : null;
 
         if (!code || code.length < 4) {
-          return jsonResponse({ success: false, error: "Activation code must be at least 4 characters" }, 400);
+          return jsonResponse({ success: false, error: "كود التفعيل لازم يكون 4 أحرف على الأقل" }, 400);
         }
 
         const { data, error } = await supabaseAdmin
@@ -342,7 +342,7 @@ serve(async (req: Request) => {
         const planName = String(body.plan_name || "PRO").trim();
         const durationDays = Math.max(1, Number(body.duration_days || 30));
         const notes = String(body.notes || "Granted by admin").trim();
-        if (!targetId) return jsonResponse({ success: false, error: "Missing user_id" }, 400);
+        if (!targetId) return jsonResponse({ success: false, error: "معرّف المستخدم ناقص" }, 400);
 
         // Resolve user by UUID or email
         let resolvedUserId = targetId;
