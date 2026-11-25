@@ -65,7 +65,8 @@ fun TelegramGateDialog(
     isVerifiedByServer: Boolean = false,
     isBusy: Boolean = false,
     onVerifyMembership: (String) -> Unit = {},
-    onContinue: () -> Unit
+    onContinue: () -> Unit,
+    bannerMessage: Pair<String, Boolean>? = null
 ) {
     val context = LocalContext.current
     val strings = LocalAppStrings.current
@@ -94,6 +95,7 @@ fun TelegramGateDialog(
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                DialogStatusBanner(bannerMessage, Modifier.padding(bottom = 12.dp))
                 Box(
                     modifier = Modifier
                         .size(64.dp)

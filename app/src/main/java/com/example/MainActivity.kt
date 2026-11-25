@@ -344,7 +344,8 @@ fun WormCopierApp(
                         onSignUp = viewModel::signUp,
                         onSignOut = viewModel::signOut,
                         onRedeemCode = viewModel::redeemActivationCode,
-                        onDismiss = viewModel::closeAccountSheet
+                        onDismiss = viewModel::closeAccountSheet,
+                        bannerMessage = bannerMessage
                     )
                 }
 
@@ -364,7 +365,8 @@ fun WormCopierApp(
                         isVerifiedByServer = serverGateStatus.telegram.verified,
                         isBusy = isAuthBusy,
                         onVerifyMembership = viewModel::verifyTelegramMembership,
-                        onContinue = viewModel::completeTelegramGate
+                        onContinue = viewModel::completeTelegramGate,
+                        bannerMessage = bannerMessage
                     )
                 }
             }

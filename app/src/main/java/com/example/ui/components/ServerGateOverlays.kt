@@ -216,6 +216,30 @@ fun MaintenanceBlockingOverlay(
 }
 
 @Composable
+fun DialogStatusBanner(message: Pair<String, Boolean>?, modifier: Modifier = Modifier) {
+    if (message == null) return
+    val (text, isError) = message
+    val tint = if (isError) com.example.ui.theme.ErrorRed else com.example.ui.theme.NeonGreen
+    val bg = if (isError) com.example.ui.theme.ErrorRedSurface else com.example.ui.theme.NeonGreenSurface
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("dialog_status_banner"),
+        color = bg,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, tint)
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = com.example.ui.theme.TextPrimary,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+@Composable
 fun AccountAuthAndSubscriptionDialog(
     authSession: AuthSessionState,
     gateStatus: ServerGateStatus,
@@ -224,7 +248,8 @@ fun AccountAuthAndSubscriptionDialog(
     onSignUp: (String, String, String) -> Unit,
     onSignOut: () -> Unit,
     onRedeemCode: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    bannerMessage: Pair<String, Boolean>? = null
 ) {
     val strings = LocalAppStrings.current
     var isSignUpMode by remember { mutableStateOf(false) }
@@ -291,6 +316,9 @@ fun AccountAuthAndSubscriptionDialog(
                         )
                     }
                 }
+
+                // Feedback (e.g. wrong activation code) shown inside the dialog, on top of it
+                DialogStatusBanner(bannerMessage)
 
                 // Banned banner if applicable
                 if (gateStatus.user?.isBanned == true) {
