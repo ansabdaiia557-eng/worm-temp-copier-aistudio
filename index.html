@@ -707,6 +707,44 @@ async function callAdminApi(action, payload = {}) {
     return data;
 }
 
+function enterAdminSession(user, session, showWelcome) {
+    accessToken = session.access_token;
+    const pill = document.getElementById('adminAuthPill');
+    pill.classList.remove('offline');
+    document.getElementById('adminAuthPillText').textContent = `Admin: ${user.email}`;
+    document.getElementById('btnLogout').style.display = 'inline-flex';
+    document.getElementById('serverMaintPill').style.display = 'inline-flex';
+    if (showWelcome) showToast('تم الاتصال بمشرف ANS SERVER CONTROL بنجاح ✓');
+    switchSection('sec-overview', document.querySelector('[data-sec="sec-overview"]'));
+}
+
+// Restore a saved session on page load so the admin stays signed in.
+async function restoreAdminSession() {
+    const url = (localStorage.getItem('ans_supabase_url') || '').trim().replace(/\/+$/, '');
+    const key = (localStorage.getItem('ans_supabase_publishable_key') || '').trim();
+    if (!url || !key || typeof supabase === 'undefined') return;
+    try {
+        supabaseClient = supabase.createClient(url, key, {
+            auth: { persistSession: true, autoRefreshToken: true, storageKey: 'ans_admin_auth' }
+        });
+        supabaseClient.auth.onAuthStateChange((event, session) => {
+            if (session && (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN')) {
+                accessToken = session.access_token;
+            }
+        });
+        const { data } = await supabaseClient.auth.getSession();
+        const session = data && data.session;
+        if (!session) return;
+        const user = session.user;
+        const role = user?.app_metadata?.role;
+        const isAdmin = role === 'admin' || role === 'super_admin' || user?.app_metadata?.is_admin === true;
+        if (!isAdmin) return;
+        enterAdminSession(user, session, false);
+    } catch (e) {
+        console.warn('Session restore failed', e);
+    }
+}
+
 async function authenticateAdmin() {
     const url = document.getElementById('supabaseUrlInput').value.trim().replace(/\/+$/, '');
     const key = document.getElementById('supabaseKeyInput').value.trim();
@@ -719,7 +757,14 @@ async function authenticateAdmin() {
     }
 
     try {
-        supabaseClient = supabase.createClient(url, key);
+        supabaseClient = supabase.createClient(url, key, {
+            auth: { persistSession: true, autoRefreshToken: true, storageKey: 'ans_admin_auth' }
+        });
+        supabaseClient.auth.onAuthStateChange((event, session) => {
+            if (session && (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN')) {
+                accessToken = session.access_token;
+            }
+        });
         const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
         if (error) throw error;
 
@@ -731,18 +776,9 @@ async function authenticateAdmin() {
             throw new Error('مرفوض: هذا الحساب لا يملك صلاحية app_metadata admin');
         }
 
-        accessToken = data.session.access_token;
         localStorage.setItem('ans_supabase_url', url);
         localStorage.setItem('ans_supabase_publishable_key', key);
-
-        const pill = document.getElementById('adminAuthPill');
-        pill.classList.remove('offline');
-        document.getElementById('adminAuthPillText').textContent = `Admin: ${user.email}`;
-        document.getElementById('btnLogout').style.display = 'inline-flex';
-        document.getElementById('serverMaintPill').style.display = 'inline-flex';
-
-        showToast('تم الاتصال بمشرف ANS SERVER CONTROL بنجاح ✓');
-        switchSection('sec-overview', document.querySelector('[data-sec="sec-overview"]'));
+        enterAdminSession(user, data.session, true);
     } catch (e) {
         showToast(e.message, true);
     }
@@ -1297,6 +1333,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const savedKey = localStorage.getItem('ans_supabase_publishable_key') || localStorage.getItem('ans_supabase_anon');
     if (savedUrl) document.getElementById('supabaseUrlInput').value = savedUrl;
     if (savedKey) document.getElementById('supabaseKeyInput').value = savedKey;
+    restoreAdminSession();
 });
 </script>
 </body>
