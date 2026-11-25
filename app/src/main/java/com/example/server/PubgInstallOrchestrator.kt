@@ -294,7 +294,6 @@ class PubgInstallOrchestrator(
                     async(Dispatchers.IO) {
                         run copyOne@{
                 val (item, cachedFile) = pair
-                val (item, cachedFile) = pair
                 val relativeDir = sanitizeRelativeSubPath(item.targetRelativePath)
                 val effectiveDestDir = if (relativeDir.isNotBlank()) {
                     "$baseDestPath/$relativeDir"
