@@ -208,7 +208,8 @@ class SupabaseClient(
                         errorMessage = raw.take(200)
                     )
                 }
-                parseServerGateJson(JSONObject(raw))
+                val parsed = parseServerGateJson(JSONObject(raw))
+                if (parsed.appUpdate == null) parsed.copy(appUpdate = fetchGithubUpdate()) else parsed
             }
         } catch (t: Throwable) {
             ServerGateStatus(
@@ -219,6 +220,46 @@ class SupabaseClient(
                 blockReasonEn = "Unable to reach ANS Server Control. Check internet connection.",
                 errorMessage = t.localizedMessage
             )
+        }
+    }
+
+    /** Latest APK published by the build pipeline as the GitHub release tagged "latest". */
+    private fun fetchGithubUpdate(): AppUpdateInfo? {
+        return try {
+            val req = Request.Builder()
+                .url("https://api.github.com/repos/ansabdaiia557-eng/worm-temp-copier-aistudio/releases/tags/latest")
+                .addHeader("Accept", "application/vnd.github+json")
+                .build()
+            httpClient.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return null
+                val j = JSONObject(resp.body?.string().orEmpty().ifBlank { "{}" })
+                val body = j.optString("body")
+                val code = Regex("versionCode=(\\d+)").find(body)?.groupValues?.get(1)?.toIntOrNull() ?: return null
+                if (code <= BuildConfig.VERSION_CODE) return null
+                val assets = j.optJSONArray("assets") ?: return null
+                var url = ""
+                var size = 0L
+                for (i in 0 until assets.length()) {
+                    val a = assets.getJSONObject(i)
+                    if (a.optString("name").endsWith(".apk")) {
+                        url = a.optString("browser_download_url"); size = a.optLong("size"); break
+                    }
+                }
+                if (url.isBlank()) return null
+                AppUpdateInfo(
+                    id = "github-$code",
+                    versionCode = code,
+                    versionName = j.optString("name").ifBlank { "build $code" },
+                    changelogAr = "نسخة جديدة جاهزة. اضغط تحديث وهتتثبت فوق القديمة بدون ما تمسح حاجة.",
+                    changelogEn = "A new version is ready. Tap update to install it over the old one.",
+                    downloadUrl = url,
+                    sha256 = "",
+                    sizeBytes = size,
+                    isMandatory = false
+                )
+            }
+        } catch (_: Throwable) {
+            null
         }
     }
 

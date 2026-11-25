@@ -16,7 +16,7 @@ android {
     applicationId = "com.aistudio.wormtempcopier.xkpqzr"
     minSdk = 24
     targetSdk = 36
-    versionCode = 2
+    versionCode = System.getenv("VERSION_CODE")?.toIntOrNull() ?: 2
     versionName = "1.3.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

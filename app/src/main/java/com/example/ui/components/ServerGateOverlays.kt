@@ -1,5 +1,8 @@
 package com.example.ui.components
 
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import com.example.server.AppInstaller
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import android.content.Intent
@@ -685,18 +688,30 @@ fun AppUpdateDialog(
                     }
                 }
 
+                var downloading by remember { mutableStateOf(false) }
+                var dlProgress by remember { mutableStateOf(0f) }
+                var dlError by remember { mutableStateOf<String?>(null) }
+                val updScope = rememberCoroutineScope()
+                dlError?.let { Text(text = it, color = ErrorRed, fontSize = 12.sp) }
                 Button(
                     onClick = {
-                        if (updateInfo.downloadUrl.isNotBlank()) {
-                            try {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(updateInfo.downloadUrl)).apply {
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        if (updateInfo.downloadUrl.isNotBlank() && !downloading) {
+                            downloading = true
+                            dlError = null
+                            updScope.launch {
+                                val res = AppInstaller.download(context, updateInfo.downloadUrl) { dlProgress = it }
+                                downloading = false
+                                res.onSuccess { f ->
+                                    runCatching { AppInstaller.install(context, f) }.onFailure {
+                                        dlError = if (strings.isArabic) "تعذر فتح التثبيت" else "Could not open installer"
+                                    }
+                                }.onFailure {
+                                    dlError = if (strings.isArabic) "فشل التنزيل، تحقق من الاتصال وحاول مرة أخرى" else "Download failed, check connection and retry"
                                 }
-                                context.startActivity(intent)
-                            } catch (_: Throwable) {
                             }
                         }
                     },
+                    enabled = !downloading,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp)
@@ -708,7 +723,9 @@ fun AppUpdateDialog(
                     )
                 ) {
                     Text(
-                        text = strings.btnDownloadAppUpdate,
+                        text = if (downloading) {
+                            (if (strings.isArabic) "جارٍ التنزيل " else "Downloading ") + "${(dlProgress * 100).toInt()}%"
+                        } else strings.btnDownloadAppUpdate,
                         fontWeight = FontWeight.Bold
                     )
                 }
