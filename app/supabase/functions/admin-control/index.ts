@@ -258,7 +258,7 @@ serve(async (req: Request) => {
         const code = String(body.code || "").trim().toUpperCase();
         const description = String(body.description || "").trim();
         const codeType = body.code_type === "multi_use" ? "multi_use" : "single_use";
-        const maxUses = codeType === "single_use" ? 1 : Math.max(1, Number(body.max_uses || 5));
+        const maxUses = codeType === "single_use" ? 1 : Math.max(1, Number(body.max_uses || 1000000));
         const durationDays = Math.max(1, Number(body.duration_days || 30));
         const expiresAt = body.expires_at ? String(body.expires_at) : null;
 
