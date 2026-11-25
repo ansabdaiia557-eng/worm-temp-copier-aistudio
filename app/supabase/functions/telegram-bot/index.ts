@@ -40,6 +40,50 @@ serve(async (req: Request) => {
     if (!from || !chatId || msg?.chat?.type && msg.chat.type !== "private") return new Response("ok");
 
     const text: string = (msg?.text || "").trim();
+    const BOT_USER = "Kharbash0bot";
+    const myLink = `https://t.me/${BOT_USER}?start=ref_${from.id}`;
+
+    // Referral: /start ref_<id> from a brand-new user
+    const refMatch = /^\/start\s+ref_(\d{3,15})$/.exec(text);
+    if (refMatch && !cb) {
+      const referrerId = Number(refMatch[1]);
+      if (referrerId !== from.id) {
+        const { data: existing } = await admin.from("user_profiles").select("id").eq("telegram_user_id", from.id).limit(1);
+        const { data: refProfile } = await admin.from("user_profiles").select("id").eq("telegram_user_id", referrerId).limit(1);
+        if ((!existing || existing.length === 0) && refProfile && refProfile.length > 0) {
+          await admin.from("referrals").upsert(
+            { referrer_tg_id: referrerId, invited_tg_id: from.id },
+            { onConflict: "invited_tg_id", ignoreDuplicates: true }
+          );
+        }
+      }
+    }
+
+    if (cb && cb.data === "my_link" || /^\/(invite|ref)|^(رابطي|رابط الدعوة)/.test(text)) {
+      if (cb) await tg(token, "answerCallbackQuery", { callback_query_id: cb.id });
+      await tg(token, "sendMessage", {
+        chat_id: chatId,
+        parse_mode: "HTML",
+        text: `🎁 <b>رابط الدعوة الخاص بك</b>\n\n${myLink}\n\nكل صاحب يدخل من رابطك ويفعّل أول اشتراك له:\n• انت تاخد <b>٣ أيام</b> هدية\n• وهو ياخد <b>يوم</b> هدية\n\nشوف دعواتك بكتابة: دعواتي`,
+      });
+      return new Response("ok");
+    }
+
+    if (cb && cb.data === "my_invites" || /^\/(invites|myinvites)|^دعواتي/.test(text)) {
+      if (cb) await tg(token, "answerCallbackQuery", { callback_query_id: cb.id });
+      const { data: rows } = await admin.from("referrals").select("status, referrer_days").eq("referrer_tg_id", from.id);
+      const all = rows || [];
+      const rewarded = all.filter((r: any) => r.status === "rewarded");
+      const pending = all.filter((r: any) => r.status === "pending").length;
+      const days = rewarded.reduce((a: number, r: any) => a + (r.referrer_days || 0), 0);
+      await tg(token, "sendMessage", {
+        chat_id: chatId,
+        parse_mode: "HTML",
+        text: `👥 <b>دعواتي</b>\n\n✅ دعوات ناجحة: <b>${rewarded.length}</b>\n⏳ في الانتظار (لسه ما فعّلوش): <b>${pending}</b>\n🎁 إجمالي الأيام اللي كسبتها: <b>${days}</b> يوم\n\nرابطك:\n${myLink}`,
+      });
+      return new Response("ok");
+    }
+
     const isCodeRequest = !!cb && cb.data === "get_code" || /^\/(code|login)/.test(text);
 
     if (cb) await tg(token, "answerCallbackQuery", { callback_query_id: cb.id });
@@ -47,6 +91,7 @@ serve(async (req: Request) => {
     const keyboard = {
       inline_keyboard: [
         [{ text: "✅ تحقق من اشتراكي واحصل على الكود", callback_data: "get_code" }],
+        [{ text: "🎁 رابط الدعوة (٣ أيام هدية)", callback_data: "my_link" }, { text: "👥 دعواتي", callback_data: "my_invites" }],
         [{ text: "📢 قناة التليجرام", url: DEFAULT_CHANNEL_URL }],
       ],
     };

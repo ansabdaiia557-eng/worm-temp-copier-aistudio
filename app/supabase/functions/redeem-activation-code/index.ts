@@ -13,6 +13,7 @@ import {
   jsonResponse,
   logSecurityEvent,
 } from "../_shared/utils.ts";
+import { processReferralReward } from "../_shared/referral.ts";
 
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -205,6 +206,8 @@ serve(async (req: Request) => {
       details: { duration_days: codeRow.duration_days, ends_at: endsAt.toISOString() },
       ip_address: ip,
     });
+
+    await processReferralReward(supabaseAdmin, user.id);
 
     return jsonResponse({
       success: true,

@@ -15,6 +15,7 @@ import {
   getClientIp,
 } from "../_shared/utils.ts";
 import { escHtml, notifyChannel } from "../_shared/tg.ts";
+import { processReferralReward } from "../_shared/referral.ts";
 
 const SYSTEM_STATUS_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -375,6 +376,7 @@ serve(async (req: Request) => {
         if (error) throw error;
 
         await writeAudit("GRANT_SUBSCRIPTION", "subscription", data?.id || null, { user_id: resolvedUserId, planName, durationDays });
+        await processReferralReward(supabaseAdmin, resolvedUserId);
         return jsonResponse({ success: true, subscription: data });
       }
 
