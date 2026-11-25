@@ -875,6 +875,17 @@ serve(async (req: Request) => {
         return jsonResponse({ success: true, allow });
       }
 
+      case "notify_diagnose": {
+        const tok = Deno.env.get("TELEGRAM_BOT_TOKEN");
+        const chan = Deno.env.get("TELEGRAM_CHANNEL_ID") || "@Kharbash_anas";
+        let me: unknown = null, chat: unknown = null;
+        if (tok) {
+          me = await fetch(`https://api.telegram.org/bot${tok}/getMe`).then((r) => r.json()).catch((e) => String(e));
+          chat = await fetch(`https://api.telegram.org/bot${tok}/getChat?chat_id=${encodeURIComponent(chan)}`).then((r) => r.json()).catch((e) => String(e));
+        }
+        return jsonResponse({ success: true, has_token: Boolean(tok), channel: chan, me, chat });
+      }
+
       case "reset_device": {
         const targetId = String(body.user_id || "");
         if (!targetId) return jsonResponse({ success: false, error: "معرّف المستخدم ناقص" }, 400);

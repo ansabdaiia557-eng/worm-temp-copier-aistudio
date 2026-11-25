@@ -27,8 +27,10 @@ export async function notifyChannel(html: string): Promise<boolean> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chat_id: chat, text: html, parse_mode: "HTML", disable_web_page_preview: true }),
     });
+    if (!r.ok) console.error("notifyChannel failed", r.status, await r.text().catch(() => ""));
     return r.ok;
-  } catch {
+  } catch (e) {
+    console.error("notifyChannel error", e);
     return false;
   }
 }
