@@ -423,16 +423,16 @@
                 <div class="card-header"><div class="card-title">📦 رفع ملف رسمي للنسخ التلقائي داخل PUBG</div></div>
                 <div style="margin-bottom:10px;">
                     <button class="btn btn-sm" type="button" onclick="document.getElementById('fileUploadInput2').click()">📂 اختيار من مدير الملفات (للموبايل)</button>
-                    <input type="file" id="fileUploadInput2" accept="application/octet-stream,.pak,.obb,.bin,.cfg,.json,.ini,.txt,.zip,.dat,.sav,.xml,.db,.so" style="display:none" onchange="handleFileSelected(event)">
+                    <input type="file" id="fileUploadInput2" multiple accept="application/octet-stream,.pak,.obb,.bin,.cfg,.json,.ini,.txt,.zip,.dat,.sav,.xml,.db,.so" style="display:none" onchange="handleFileSelected(event)">
                 </div>
                 <div class="file-dropzone" onclick="document.getElementById('fileUploadInput').click()">
-                    <input type="file" id="fileUploadInput" accept="application/octet-stream,application/*,text/*,.pak,.obb,.bin,.cfg,.json,.ini,.txt,.zip,.rar,.7z,.dat,.sav,.xml,.db,.so,.apk,.pdf,.csv" onchange="handleFileSelected(event)">
+                    <input type="file" id="fileUploadInput" multiple accept="application/octet-stream,application/*,text/*,.pak,.obb,.bin,.cfg,.json,.ini,.txt,.zip,.rar,.7z,.dat,.sav,.xml,.db,.so,.apk,.pdf,.csv" onchange="handleFileSelected(event)">
                     <div style="font-size:30px;">📁</div>
-                    <strong>اختر ملف الحزمة (pak / cfg / json / bin)</strong>
+                    <strong>اختر ملف أو أكثر (pak / cfg / json / bin)</strong>
                     <div style="font-size:11px; color:var(--text-secondary);">يتم حساب SHA-256 تلقائياً ورفعه إلى Bucket خاص <code>worm-content-files</code></div>
                 </div>
                 <div id="fileInfoBox" style="display:none; margin-top:12px; padding:12px; background:var(--surface-elevated); border-radius:10px; font-size:12px;">
-                    <div><strong>الملف:</strong> <span id="infoFileName" class="mono"></span></div>
+                    <div><strong>الملفات:</strong> <span id="infoFileName" class="mono"></span></div>
                     <div><strong>الحجم:</strong> <span id="infoFileSize" class="mono"></span></div>
                     <div><strong>SHA-256:</strong> <span id="infoFileHash" class="mono" style="color:var(--neon-green); word-break:break-all;"></span></div>
                 </div>
@@ -1026,55 +1026,69 @@ async function updateSub(id, status, extendDays = 0) {
     try { await callAdminApi('update_subscription_status', { subscription_id: id, status, extend_days: extendDays }); loadSubscriptions(); } catch (e) { showToast(e.message, true); }
 }
 
+let selectedFiles = [];
+
 async function handleFileSelected(ev) {
-    const file = ev.target.files[0];
-    if (!file) return;
-    selectedFileBlob = file;
-    document.getElementById('infoFileName').textContent = file.name;
-    document.getElementById('infoFileSize').textContent = `${file.size} Bytes`;
+    const files = Array.from(ev.target.files || []);
+    if (!files.length) return;
+    selectedFiles = [];
+    selectedFileBlob = null; computedFileSha256 = '';
+    document.getElementById('infoFileName').textContent = files.map(f => f.name).join(' ، ');
+    document.getElementById('infoFileSize').textContent = `${files.length} ملف، ${files.reduce((n, f) => n + f.size, 0)} Bytes`;
     document.getElementById('infoFileHash').textContent = 'جارٍ الحساب...';
     document.getElementById('fileInfoBox').style.display = 'block';
-    computedFileSha256 = await computeBrowserSha256(file);
-    document.getElementById('infoFileHash').textContent = computedFileSha256;
-    showToast('تم حساب SHA-256 بنجاح ✓');
+    const hashes = [];
+    for (const f of files) {
+        const sha = await computeBrowserSha256(f);
+        selectedFiles.push({ file: f, sha });
+        hashes.push(files.length > 1 ? `${f.name}: ${sha}` : sha);
+    }
+    selectedFileBlob = files[0]; computedFileSha256 = selectedFiles[0].sha;
+    document.getElementById('infoFileHash').innerHTML = hashes.map(h => escapeHtml(h)).join('<br>');
+    showToast(`تم حساب SHA-256 لـ ${files.length} ملف ✓`);
 }
 
 async function uploadServerFile(isPublished) {
-    if (!supabaseClient || !selectedFileBlob || !computedFileSha256) {
+    if (!supabaseClient || !selectedFiles.length) {
         showToast('يرجى تسجيل الدخول واختيار ملف أولاً', true); return;
     }
     try {
         const category = document.getElementById('upCategory').value;
-        const storagePath = `${category.toLowerCase()}/${Date.now()}_${selectedFileBlob.name}`;
-        const { error: upErr } = await supabaseClient.storage.from('worm-content-files').upload(storagePath, selectedFileBlob, { upsert: true });
-        if (upErr) throw upErr;
-
         const editions = [];
         if (document.getElementById('edGlobal').checked) editions.push('PUBG_GLOBAL');
         if (document.getElementById('edKorea').checked) editions.push('PUBG_KOREA');
         if (document.getElementById('edVietnam').checked) editions.push('PUBG_VIETNAM');
         if (document.getElementById('edTaiwan').checked) editions.push('PUBG_TAIWAN');
         if (document.getElementById('edFlash').checked) editions.push('PUBG_FLASH');
-
         const assigned = document.getElementById('upAssignedUsers').value.split(',').map(s => s.trim()).filter(Boolean);
-        await callAdminApi('register_file_upload', {
-            title: document.getElementById('upTitle').value.trim() || selectedFileBlob.name,
-            description: document.getElementById('upDesc').value.trim(),
-            category,
-            version: document.getElementById('upVersion').value.trim(),
-            version_code: Number(document.getElementById('upVersionCode').value || 1),
-            size_bytes: selectedFileBlob.size,
-            target_filename: selectedFileBlob.name,
-            target_relative_path: document.getElementById('upRelPath').value.trim(),
-            sha256: computedFileSha256,
-            storage_path: storagePath,
-            compatible_editions: editions,
-            is_published: isPublished,
-            is_required: document.getElementById('upRequired').checked,
-            target_group: document.getElementById('upTargetGroup').value,
-            assigned_user_ids: assigned
-        });
-        showToast(isPublished ? 'تم رفع ونشر الملف رسمياً ✓' : 'تم حفظ المسودة ✓');
+        const single = selectedFiles.length === 1;
+        let done = 0;
+        for (const { file, sha } of selectedFiles) {
+            showToast(`جارٍ رفع ${file.name} (${done + 1}/${selectedFiles.length})...`);
+            const storagePath = `${category.toLowerCase()}/${Date.now()}_${done}_${file.name}`;
+            const { error: upErr } = await supabaseClient.storage.from('worm-content-files').upload(storagePath, file, { upsert: true });
+            if (upErr) throw upErr;
+            await callAdminApi('register_file_upload', {
+                title: (single && document.getElementById('upTitle').value.trim()) || file.name,
+                description: document.getElementById('upDesc').value.trim(),
+                category,
+                version: document.getElementById('upVersion').value.trim(),
+                version_code: Number(document.getElementById('upVersionCode').value || 1),
+                size_bytes: file.size,
+                target_filename: file.name,
+                target_relative_path: document.getElementById('upRelPath').value.trim(),
+                sha256: sha,
+                storage_path: storagePath,
+                compatible_editions: editions,
+                is_published: isPublished,
+                is_required: document.getElementById('upRequired').checked,
+                target_group: document.getElementById('upTargetGroup').value,
+                assigned_user_ids: assigned
+            });
+            done++;
+        }
+        selectedFiles = [];
+        showToast(isPublished ? `تم رفع ونشر ${done} ملف ✓` : `تم حفظ ${done} مسودة ✓`);
         switchSection('sec-catalog', document.querySelector('[data-sec="sec-catalog"]'));
     } catch (e) { showToast(e.message, true); }
 }
