@@ -34,15 +34,15 @@ jobs:
           fi
 
       - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@v3
         with:
-          version: latest
+          version: "^3"
 
       - name: Link Supabase project
-        run: supabase --workdir app link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+        run: supabase --workdir app link --project-ref "$SUPABASE_PROJECT_REF"
 
       - name: Push database migrations
-        run: supabase --workdir app db push --password "$SUPABASE_DB_PASSWORD"
+        run: supabase --workdir app db push --yes --remote --password "$SUPABASE_DB_PASSWORD"
 
       - name: Sync Edge Function Secrets (Telegram Bot)
         env:
@@ -50,12 +50,12 @@ jobs:
           TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
         run: |
           if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
-            supabase --workdir app secrets set --project-ref "$SUPABASE_PROJECT_REF" TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN"
+            supabase --workdir app secrets set --remote="$SUPABASE_PROJECT_REF" --yes TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN"
           else
             echo "NOTICE: TELEGRAM_BOT_TOKEN GitHub Secret is not set; skipping secret sync."
           fi
           if [ -n "$TELEGRAM_CHANNEL_ID" ]; then
-            supabase --workdir app secrets set --project-ref "$SUPABASE_PROJECT_REF" TELEGRAM_CHANNEL_ID="$TELEGRAM_CHANNEL_ID"
+            supabase --workdir app secrets set --remote="$SUPABASE_PROJECT_REF" --yes TELEGRAM_CHANNEL_ID="$TELEGRAM_CHANNEL_ID"
           fi
 
       - name: Deploy all 7 Edge Functions
@@ -69,5 +69,5 @@ jobs:
             verify-telegram-membership \
             admin-control; do
             echo "Deploying Edge Function: $fn"
-            supabase --workdir app functions deploy "$fn" --project-ref "$SUPABASE_PROJECT_REF"
+            supabase --workdir app functions deploy "$fn" --remote="$SUPABASE_PROJECT_REF" --yes
           done
