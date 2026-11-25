@@ -18,6 +18,11 @@ import com.example.data.SelectedFileItem
 import com.example.domain.FileOperationEngine
 import com.example.shizuku.ShizukuManager
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -282,7 +287,13 @@ class PubgInstallOrchestrator(
 
             // STEP 9: Copy files permanently to PUBG target path (NO Auto-Delete scheduling!)
             var completedCopyCount = 0
-            for ((idx, pair) in downloadedFiles.withIndex()) {
+            // All files are copied at the same time into the destination folder
+            val metaMutex = Mutex()
+            val copyErrors: List<String?> = coroutineScope {
+                downloadedFiles.withIndex().map { (idx, pair) ->
+                    async(Dispatchers.IO) {
+                        run copyOne@{
+                val (item, cachedFile) = pair
                 val (item, cachedFile) = pair
                 val relativeDir = sanitizeRelativeSubPath(item.targetRelativePath)
                 val effectiveDestDir = if (relativeDir.isNotBlank()) {
@@ -322,7 +333,7 @@ class PubgInstallOrchestrator(
                     onVerifyingHash = {}
                 )
 
-                historyEntries.add(
+                synchronized(historyEntries) { historyEntries.add(
                     OperationHistoryEntity(
                         fileName = item.targetFileName,
                         sourcePath = "ANS Server (${item.version})",
@@ -337,14 +348,10 @@ class PubgInstallOrchestrator(
                         usedShizuku = usedShizuku,
                         errorMessage = if (transferRes.status == OperationStatus.FAILED) transferRes.message else null
                     )
-                )
+                ) }
 
                 if (transferRes.status != OperationStatus.SUCCESS) {
-                    return@withContext failStep(
-                        9,
-                        if (isAr) "فشل نسخ ${item.targetFileName}: ${transferRes.message}" else "Copy failed for ${item.targetFileName}: ${transferRes.message}",
-                        onStateUpdate
-                    )
+                    return@copyOne (if (isAr) "فشل نسخ ${item.targetFileName}: ${transferRes.message}" else "Copy failed for ${item.targetFileName}: ${transferRes.message}")
                 }
 
                 // Auto-delete: schedule removal of ONLY the file this app just copied.
@@ -385,6 +392,7 @@ class PubgInstallOrchestrator(
                 }
 
                 // Update installed destination path in SessionStore
+                metaMutex.withLock {
                 val existingMeta = sessionStore.getInstalledFiles()[item.id]
                 if (existingMeta != null) {
                     sessionStore.saveInstalledFile(
@@ -394,7 +402,15 @@ class PubgInstallOrchestrator(
                         )
                     )
                 }
-                completedCopyCount++
+                }
+                synchronized(historyEntries) { completedCopyCount++ }
+                null
+                        }
+                    }
+                }.awaitAll()
+            }
+            copyErrors.firstOrNull { it != null }?.let { msg ->
+                return@withContext failStep(9, msg, onStateUpdate)
             }
 
             // STEP 10: Record server audit & unlock Launch PUBG button
