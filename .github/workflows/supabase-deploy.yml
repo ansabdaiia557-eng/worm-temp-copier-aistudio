@@ -58,7 +58,7 @@ jobs:
             supabase --workdir app secrets set --remote="$SUPABASE_PROJECT_REF" --yes TELEGRAM_CHANNEL_ID="$TELEGRAM_CHANNEL_ID"
           fi
 
-      - name: Deploy all 7 Edge Functions
+      - name: Deploy all Edge Functions
         run: |
           for fn in \
             server-gate-status \
@@ -67,7 +67,9 @@ jobs:
             record-operation-audit \
             get-download-url \
             verify-telegram-membership \
-            admin-control; do
+            admin-control \
+            telegram-bot \
+            telegram-login; do
             echo "Deploying Edge Function: $fn"
             supabase --workdir app functions deploy "$fn" --remote="$SUPABASE_PROJECT_REF" --yes
           done
