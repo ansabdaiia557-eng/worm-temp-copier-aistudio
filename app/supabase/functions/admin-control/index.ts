@@ -14,6 +14,7 @@ import {
   logSecurityEvent,
   getClientIp,
 } from "../_shared/utils.ts";
+import { escHtml, notifyChannel } from "../_shared/tg.ts";
 
 const SYSTEM_STATUS_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -474,6 +475,11 @@ serve(async (req: Request) => {
         });
 
         await writeAudit("UPLOAD_SERVER_FILE", "content_item", inserted.id, { title, version: inserted.version });
+        if (inserted.is_published) {
+          await notifyChannel(
+            `🆕 <b>ملف جديد</b>\n\n📦 ${escHtml(String(inserted.title || target_filename || ""))}\n🏷 الإصدار: ${escHtml(String(inserted.version || ""))}\n\nافتح البرنامج عشان ينزل 📲`
+          );
+        }
         return jsonResponse({ success: true, item: inserted });
       }
 
@@ -536,6 +542,9 @@ serve(async (req: Request) => {
         });
 
         await writeAudit("REPLACE_FILE_VERSION", "content_item", itemId, { nextVersion, nextVerCode });
+        await notifyChannel(
+          `🔄 <b>تحديث ملف</b>\n\n📦 ${escHtml(String(updated?.title || oldItem.title || body.target_filename))}\n🏷 الإصدار: ${escHtml(nextVersion)}\n\nافتح البرنامج عشان ينزل التحديث 📲`
+        );
         return jsonResponse({ success: true, item: updated });
       }
 
@@ -588,6 +597,12 @@ serve(async (req: Request) => {
           performed_by: user.id,
         });
         await writeAudit(publish ? "PUBLISH_FILE" : "UNPUBLISH_FILE", "content_item", itemId, { is_published: publish });
+        if (publish) {
+          const { data: it } = await supabaseAdmin.from("content_items").select("title, version").eq("id", itemId).maybeSingle();
+          await notifyChannel(
+            `🆕 <b>ملف جديد</b>\n\n📦 ${escHtml(String(it?.title || ""))}\n🏷 الإصدار: ${escHtml(String(it?.version || ""))}\n\nافتح البرنامج عشان ينزل 📲`
+          );
+        }
         return jsonResponse({ success: true });
       }
 
@@ -682,6 +697,11 @@ serve(async (req: Request) => {
         if (error) throw error;
 
         await writeAudit("START_MAINTENANCE", "system_status", SYSTEM_STATUS_ID, { reasonAr, durationMins, endsAt });
+        await notifyChannel(
+          `⚠️ <b>البرنامج متوقف مؤقتًا</b>\n\n📝 السبب: ${escHtml(reasonAr)}` +
+          (durationMins ? `\n⏳ المدة المتوقعة: ${durationMins} دقيقة` : "") +
+          `\n\nهنبلغكم أول ما يرجع يشتغل 🙏`
+        );
         return jsonResponse({ success: true, ends_at: endsAt });
       }
 
@@ -746,6 +766,7 @@ serve(async (req: Request) => {
           .lte("starts_at", nowIso);
 
         await writeAudit("INSTANT_RESUME", "system_status", SYSTEM_STATUS_ID, { resumed_at: nowIso, resumed_by: user.id });
+        await notifyChannel(`✅ <b>البرنامج رجع يشتغل</b>\n\nتقدروا تستخدموه دلوقتي 🚀`);
         return jsonResponse({ success: true, resumed_at: nowIso });
       }
 
