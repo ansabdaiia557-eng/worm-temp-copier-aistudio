@@ -2,6 +2,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { getAdminClient, enforceRateLimit } from "../_shared/utils.ts";
 import { codeHash, webhookSecret } from "../_shared/tg.ts";
+import { handleAdmin } from "../_shared/tgadmin.ts";
 
 const DEFAULT_CHANNEL = "@Kharbash_anas";
 const DEFAULT_CHANNEL_URL = "https://t.me/Kharbash_anas";
@@ -33,6 +34,7 @@ serve(async (req: Request) => {
   try {
     const admin = getAdminClient();
     const channel = Deno.env.get("TELEGRAM_CHANNEL_ID") || DEFAULT_CHANNEL;
+    if (await handleAdmin(admin, (m, p) => tg(token, m, p), token, update)) return new Response("ok");
     const cb = update.callback_query;
     const msg = update.message;
     const from = cb?.from || msg?.from;

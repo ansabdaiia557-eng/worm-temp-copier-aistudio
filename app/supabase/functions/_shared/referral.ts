@@ -15,7 +15,7 @@ async function dm(tgId: number | string, text: string) {
   } catch { /* ignore */ }
 }
 
-async function addDays(admin: SupabaseClient, userId: string, days: number, plan: string) {
+export async function addDays(admin: SupabaseClient, userId: string, days: number, plan: string) {
   const now = new Date();
   const { data: sub } = await admin
     .from("subscriptions").select("id, ends_at")
