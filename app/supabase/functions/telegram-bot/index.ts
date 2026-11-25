@@ -57,6 +57,11 @@ serve(async (req: Request) => {
             { referrer_tg_id: referrerId, invited_tg_id: from.id },
             { onConflict: "invited_tg_id", ignoreDuplicates: true }
           );
+          await tg(token, "sendMessage", {
+            chat_id: chatId,
+            parse_mode: "HTML",
+            text: "🎁 <b>دخلت من دعوة صاحبك!</b>\n\nهتاخد <b>يوم اشتراك مجاني</b> أول ما تسجل دخول التطبيق، من غير كود.\nاشترك في القناة واضغط الزر تحت عشان تاخد كود الدخول 👇",
+          });
         }
       }
     }

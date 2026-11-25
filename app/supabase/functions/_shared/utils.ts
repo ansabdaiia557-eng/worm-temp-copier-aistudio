@@ -1,5 +1,7 @@
 import { createClient, SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
+import { maybeGiveWelcomeGift } from "./referral.ts";
+
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-app-version",
@@ -482,6 +484,7 @@ export async function checkClientIntegrity(
     await supabaseAdmin.from("user_profiles").update({
       device_id: dev, device_model: deviceModel.slice(0, 128) || null, device_locked_at: new Date().toISOString(),
     }).eq("id", user.id);
+    await maybeGiveWelcomeGift(supabaseAdmin, user.id, dev);
     return { ok: true };
   }
   if (locked !== dev) {

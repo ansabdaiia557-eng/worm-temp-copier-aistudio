@@ -62,14 +62,6 @@ serve(async (req: Request) => {
       }
     }
 
-    const gateResult = await evaluateServerGate(
-      supabaseAdmin,
-      user,
-      profile,
-      clientFiles,
-      clientVersionCode
-    );
-
     const integrity = await checkClientIntegrity(
       supabaseAdmin,
       user,
@@ -81,6 +73,14 @@ serve(async (req: Request) => {
       ip,
       "server-gate-status"
     );
+    const gateResult = await evaluateServerGate(
+      supabaseAdmin,
+      user,
+      profile,
+      clientFiles,
+      clientVersionCode
+    );
+
     if (!integrity.ok) {
       return jsonResponse({
         ...gateResult,
