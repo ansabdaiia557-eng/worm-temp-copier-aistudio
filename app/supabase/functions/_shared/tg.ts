@@ -69,3 +69,26 @@ export async function notifyUpdate(admin: any, html: string): Promise<{ ok: bool
     return { ok: false, error: String(e) };
   }
 }
+
+// Required chats: a user must be a member of ALL of these.
+export const REQUIRED_CHATS: { id: string; name: string; url: string }[] = [
+  { id: "@Kharbash_anas", name: "القناة الرئيسية", url: "https://t.me/Kharbash_anas" },
+  { id: "@Scribble_explanations", name: "قناة الشروحات", url: "https://t.me/Scribble_explanations" },
+  { id: "@Kharbash_Solution", name: "جروب حل المشاكل", url: "https://t.me/Kharbash_Solution" },
+];
+
+export async function checkAllMemberships(token: string, userId: string | number) {
+  const results = await Promise.all(REQUIRED_CHATS.map(async (c) => {
+    try {
+      const r = await fetch(`https://api.telegram.org/bot${token}/getChatMember?chat_id=${encodeURIComponent(c.id)}&user_id=${encodeURIComponent(String(userId))}`);
+      const j = await r.json();
+      const st = j?.result?.status;
+      const member = Boolean(j?.ok) && (["creator", "administrator", "member"].includes(st) || (st === "restricted" && j.result.is_member === true));
+      return { ...c, member, error: j?.ok ? null : (j?.description || "error") };
+    } catch (e) {
+      return { ...c, member: false, error: String(e) };
+    }
+  }));
+  const missing = results.filter((r) => !r.member);
+  return { all: missing.length === 0, results, missing };
+}

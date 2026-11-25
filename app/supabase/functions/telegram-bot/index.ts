@@ -1,7 +1,7 @@
 // Telegram webhook for @Kharbash0bot: checks channel membership, sends a 6-digit login code.
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { getAdminClient, enforceRateLimit } from "../_shared/utils.ts";
-import { codeHash, webhookSecret } from "../_shared/tg.ts";
+import { codeHash, webhookSecret, checkAllMemberships } from "../_shared/tg.ts";
 import { handleAdmin } from "../_shared/tgadmin.ts";
 
 const DEFAULT_CHANNEL = "@Kharbash_anas";
@@ -99,14 +99,15 @@ serve(async (req: Request) => {
       inline_keyboard: [
         [{ text: "✅ تحقق من اشتراكي واحصل على الكود", callback_data: "get_code" }],
         [{ text: "🎁 رابط الدعوة (٣ أيام هدية)", callback_data: "my_link" }, { text: "👥 دعواتي", callback_data: "my_invites" }],
-        [{ text: "📢 قناة التليجرام", url: DEFAULT_CHANNEL_URL }],
+        [{ text: "📢 القناة الرئيسية", url: DEFAULT_CHANNEL_URL }],
+        [{ text: "📚 قناة الشروحات", url: "https://t.me/Scribble_explanations" }, { text: "🛠 حل المشاكل", url: "https://t.me/Kharbash_Solution" }],
       ],
     };
 
     if (!isCodeRequest) {
       await tg(token, "sendMessage", {
         chat_id: chatId,
-        text: "أهلاً بك 👋\nاشترك في القناة أولاً، ثم اضغط الزر بالأسفل لتحصل على كود الدخول للتطبيق.",
+        text: "أهلاً بك 👋\nاشترك في القناة وقناة الشروحات وجروب حل المشاكل أولاً، ثم اضغط الزر بالأسفل لتحصل على كود الدخول للتطبيق.",
         reply_markup: keyboard,
       });
       return new Response("ok");
@@ -118,13 +119,13 @@ serve(async (req: Request) => {
       return new Response("ok");
     }
 
-    const m = await tg(token, "getChatMember", { chat_id: channel, user_id: from.id });
-    const status = m?.result?.status;
-    const isMember = m?.ok && ["creator", "administrator", "member"].includes(status);
-    if (!isMember) {
+    const chk = await checkAllMemberships(token, from.id);
+    if (!chk.all) {
+      const lines = chk.missing.map((c) => `• ${c.name}: ${c.url}`).join("\n");
       await tg(token, "sendMessage", {
         chat_id: chatId,
-        text: "لازم تشترك في القناة أولاً. اشترك ثم اضغط الزر مرة أخرى.",
+        text: `لازم تشترك في كل القنوات والجروبات الأول، ناقصك:\n\n${lines}\n\nاشترك فيهم كلهم ثم اضغط الزر مرة أخرى.`,
+        disable_web_page_preview: true,
         reply_markup: keyboard,
       });
       return new Response("ok");

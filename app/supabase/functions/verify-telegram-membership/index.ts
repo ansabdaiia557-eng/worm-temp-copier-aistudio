@@ -13,6 +13,7 @@ import {
   enforceRateLimit,
   getClientIp,
 } from "../_shared/utils.ts";
+import { checkAllMemberships } from "../_shared/tg.ts";
 
 const DEFAULT_CHANNEL_USERNAME = "@Kharbash_anas";
 const DEFAULT_CHANNEL_URL = "https://t.me/Kharbash_anas";
@@ -98,25 +99,20 @@ serve(async (req: Request) => {
       );
     }
 
-    const telegramApiUrl =
-      `https://api.telegram.org/bot${botToken}/getChatMember` +
-      `?chat_id=${encodeURIComponent(channelId)}&user_id=${encodeURIComponent(telegramUserIdStr)}`;
-
-    const tgResponse = await fetch(telegramApiUrl);
-    const tgData = await tgResponse.json();
-
-    if (!tgData.ok) {
+    const chk = await checkAllMemberships(botToken, telegramUserIdStr);
+    const errs = chk.results.filter((r) => r.error);
+    if (errs.length === chk.results.length) {
       return jsonResponse({
         success: false,
         is_member: false,
         channel_username: channelId,
         channel_url: channelUrl,
-        error: `Telegram verification error: ${tgData.description || "User not found in channel"}`,
+        error: `Telegram verification error: ${errs[0].error}`,
       });
     }
-
-    const status = tgData.result?.status;
-    const isMember = status === "creator" || status === "administrator" || status === "member";
+    const status = chk.all ? "member" : "missing";
+    const isMember = chk.all;
+    const missingNames = chk.missing.map((c) => `${c.name} (${c.url})`);
     const nowIso = new Date().toISOString();
 
     if (user) {
@@ -136,7 +132,7 @@ serve(async (req: Request) => {
         details: {
           telegram_user_id: telegramUserIdStr,
           channel: channelId,
-          chat_member_status: status,
+          chat_member_status: status, missing: missingNames,
         },
         ip_address: clientIp,
       });
@@ -146,6 +142,8 @@ serve(async (req: Request) => {
       success: true,
       is_member: isMember,
       status,
+      missing: chk.missing.map((c) => ({ name: c.name, url: c.url })),
+      message: isMember ? undefined : "لازم تشترك في: " + chk.missing.map((c) => c.name + " " + c.url).join(" | "),
       channel_username: channelId,
       channel_url: channelUrl,
       verified_at: nowIso,
