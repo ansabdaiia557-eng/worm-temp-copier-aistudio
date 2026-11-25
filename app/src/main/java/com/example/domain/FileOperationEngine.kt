@@ -942,12 +942,27 @@ class FileOperationEngine(
 
         // Stage content:// URI to an accessible external cache file if source is not a direct file path
         var tempStageFile: File? = null
-        val readableSourcePath = if (!sourceLocalPath.isNullOrBlank() && File(sourceLocalPath).exists()) {
+        // Shizuku's shell cannot read this app's private data dir (/data/user/0/<pkg>/...),
+        // so files living there are staged to the app's external cache first.
+        val privateRoots = listOfNotNull(
+            runCatching { context.filesDir.parentFile?.canonicalPath }.getOrNull(),
+            runCatching { context.dataDir.canonicalPath }.getOrNull()
+        )
+        val sourceIsPrivate = !sourceLocalPath.isNullOrBlank() && runCatching {
+            val cp = File(sourceLocalPath).canonicalPath
+            privateRoots.any { cp.startsWith(it) } || cp.startsWith("/data/")
+        }.getOrDefault(true)
+        val readableSourcePath = if (!sourceLocalPath.isNullOrBlank() && File(sourceLocalPath).exists() && !sourceIsPrivate) {
             sourceLocalPath
         } else {
             val cacheDir = context.externalCacheDir ?: context.cacheDir
             val staged = File(cacheDir, "shizuku_stage_${System.currentTimeMillis()}_${item.name}")
-            openItemInputStream(item)?.use { input ->
+            val stageInput = if (!sourceLocalPath.isNullOrBlank() && File(sourceLocalPath).exists()) {
+                File(sourceLocalPath).inputStream()
+            } else {
+                openItemInputStream(item)
+            }
+            stageInput?.use { input ->
                 FileOutputStream(staged).use { output ->
                     val buf = ByteArray(64 * 1024)
                     var read: Int
