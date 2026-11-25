@@ -154,9 +154,9 @@ class PubgInstallOrchestrator(
             }
             val selectedEdition = PRESET_GAME_EDITIONS.find { it.key == editionKey }
                 ?: PRESET_GAME_EDITIONS.first()
-            val baseDestPath = settings.activeDestinationPath.trim().trimEnd('/')
-                .ifBlank { selectedEdition.defaultPufferPath }
-            val destTreeUri = settings.activeDestinationTreeUri
+            // Files always go to the selected edition's own puffer_temp folder.
+            val baseDestPath = selectedEdition.defaultPufferPath.trim().trimEnd('/')
+            val destTreeUri: String? = null
 
             val shizukuStatus = shizukuManager.refreshStatus()
             val isRestricted = fileEngine.isRestrictedAndroidDataPath(baseDestPath)

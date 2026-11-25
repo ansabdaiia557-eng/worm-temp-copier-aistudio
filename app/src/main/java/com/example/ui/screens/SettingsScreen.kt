@@ -1,428 +1,163 @@
 package com.example.ui.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.RestartAlt
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.BuildConfig
 import com.example.data.AppSettings
-import com.example.data.DEFAULT_PUFFER_TEMP_PATH
 import com.example.server.AuthSessionState
 import com.example.server.ServerGateStatus
-import com.example.shizuku.ShizukuStatus
 import com.example.ui.components.GamingCard
 import com.example.ui.i18n.LocalAppStrings
-import com.example.ui.theme.CarbonBorder
-import com.example.ui.theme.ErrorRed
-import com.example.ui.theme.JetBrainsMonoFontFamily
 import com.example.ui.theme.NeonGreen
-import com.example.ui.theme.NeonGreenSurface
 import com.example.ui.theme.ObsidianDark
-import com.example.ui.theme.TacticalCyan
+import com.example.ui.theme.TextPrimary
+import com.example.ui.theme.TextSecondary
 
 @Composable
 fun SettingsScreen(
     settings: AppSettings,
-    shizukuStatus: ShizukuStatus,
-    onAutoShizukuChange: (Boolean) -> Unit,
-    onConnectShizuku: () -> Unit,
-    onConfirmOverwriteChange: (Boolean) -> Unit,
-    onVerifySha256Change: (Boolean) -> Unit,
-    onVibrateFailureChange: (Boolean) -> Unit,
-    onKeepHistoryChange: (Boolean) -> Unit,
+    authSession: AuthSessionState,
+    serverGateStatus: ServerGateStatus,
+    isGateChecking: Boolean,
     onLanguageChange: (String) -> Unit,
-    onDarkModeChange: (Boolean) -> Unit,
-    onResetSettings: () -> Unit,
-    authSession: AuthSessionState = AuthSessionState(),
-    serverGateStatus: ServerGateStatus = ServerGateStatus(),
-    onOpenAccountSheet: () -> Unit = {},
-    onRefreshServerGate: () -> Unit = {},
-    onSignOut: () -> Unit = {},
-    modifier: Modifier = Modifier
+    onCheckUpdates: () -> Unit,
+    onOpenAccountSheet: () -> Unit,
+    onSignOut: () -> Unit
 ) {
-    val strings = LocalAppStrings.current
+    val s = LocalAppStrings.current
+    val uriHandler = LocalUriHandler.current
+    var checkedOnce by remember { mutableStateOf(false) }
 
-    LazyColumn(
-        modifier = modifier
+    Column(
+        modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
             .testTag("settings_screen"),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        item {
-            Text(
-                text = strings.settingsScreenTitle,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        // 0. ANS Server Account & Subscription
-        item {
-            GamingCard(modifier = Modifier.testTag("settings_account_card")) {
-                SectionHeader(
-                    icon = Icons.Default.AccountCircle,
-                    title = strings.settingsAccountSection
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = if (authSession.isLoggedIn) {
-                        "${authSession.email} • ${if (serverGateStatus.subscription.isActive) strings.subscriptionActiveBadge else strings.subscriptionInactiveBadge}"
-                    } else {
-                        strings.authTitleSignIn
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onOpenAccountSheet,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("settings_open_account_btn"),
-                        border = BorderStroke(1.dp, TacticalCyan)
-                    ) {
-                        Text(
-                            text = strings.btnAccountAndPlan,
-                            color = TacticalCyan,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    OutlinedButton(
-                        onClick = onRefreshServerGate,
-                        modifier = Modifier.testTag("settings_sync_server_btn"),
-                        border = BorderStroke(1.dp, NeonGreen)
-                    ) {
-                        Text(
-                            text = strings.btnSyncServer,
-                            color = NeonGreen,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-                if (authSession.isLoggedIn) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = onSignOut,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("settings_sign_out_btn"),
-                        border = BorderStroke(1.dp, ErrorRed),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed)
-                    ) {
-                        Text(text = strings.btnSignOut, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
-        // 1. Shizuku Settings
-        item {
-            GamingCard {
-                SectionHeader(
-                    icon = Icons.Default.Security,
-                    title = strings.settingsShizukuSection
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                SettingToggleRow(
-                    title = strings.settingAutoShizukuTitle,
-                    description = strings.settingAutoShizukuDesc,
-                    checked = settings.autoUseShizuku,
-                    onCheckedChange = onAutoShizukuChange,
-                    testTag = "switch_auto_shizuku"
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                OutlinedButton(
-                    onClick = onConnectShizuku,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("settings_shizuku_btn"),
-                    border = BorderStroke(1.dp, NeonGreen)
-                ) {
-                    Text(
-                        text = "${strings.btnConnectRequestPermission} (${if (shizukuStatus.isReadyForElevatedOps) "OK" else "Check"})",
-                        color = NeonGreen,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-
-        // 2. File Protection & SHA-256 Settings
-        item {
-            GamingCard {
-                SectionHeader(
-                    icon = Icons.Default.VerifiedUser,
-                    title = strings.settingsSafetySection
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                SettingToggleRow(
-                    title = strings.settingConfirmOverwriteTitle,
-                    description = strings.settingConfirmOverwriteDesc,
-                    checked = settings.confirmOverwrite,
-                    onCheckedChange = onConfirmOverwriteChange,
-                    testTag = "switch_confirm_overwrite"
-                )
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 10.dp),
-                    color = CarbonBorder
-                )
-                SettingToggleRow(
-                    title = strings.settingVerifySha256Title,
-                    description = strings.settingVerifySha256Desc,
-                    checked = settings.verifySha256,
-                    onCheckedChange = onVerifySha256Change,
-                    testTag = "switch_verify_sha256"
-                )
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 10.dp),
-                    color = CarbonBorder
-                )
-                SettingToggleRow(
-                    title = strings.settingVibrateFailureTitle,
-                    description = strings.settingVibrateFailureDesc,
-                    checked = settings.vibrateOnFailure,
-                    onCheckedChange = onVibrateFailureChange,
-                    testTag = "switch_vibrate_failure"
-                )
-            }
-        }
-
-        // 3. History Retention Settings
-        item {
-            GamingCard {
-                SectionHeader(
-                    icon = Icons.Default.History,
-                    title = strings.settingsHistorySection
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-                SettingToggleRow(
-                    title = strings.settingKeepHistoryTitle,
-                    description = strings.settingKeepHistoryDesc,
-                    checked = settings.keepHistory,
-                    onCheckedChange = onKeepHistoryChange,
-                    testTag = "switch_keep_history"
-                )
-            }
-        }
-
-        // 4. Language & Theme Appearance
-        item {
-            GamingCard {
-                SectionHeader(
-                    icon = Icons.Default.Palette,
-                    title = strings.settingsAppearanceSection
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Language,
-                            contentDescription = null,
-                            tint = TacticalCyan,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Text(
-                            text = strings.settingLanguageTitle,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = settings.languageCode == "ar",
-                            onClick = { onLanguageChange("ar") },
-                            label = { Text("العربية (RTL)") },
-                            modifier = Modifier.testTag("lang_ar_chip"),
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = NeonGreenSurface,
-                                selectedLabelColor = NeonGreen
-                            )
-                        )
-                        FilterChip(
-                            selected = settings.languageCode == "en",
-                            onClick = { onLanguageChange("en") },
-                            label = { Text("English (LTR)") },
-                            modifier = Modifier.testTag("lang_en_chip"),
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = NeonGreenSurface,
-                                selectedLabelColor = NeonGreen
-                            )
-                        )
-                    }
-                }
-
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 10.dp),
-                    color = CarbonBorder
-                )
-
-                SettingToggleRow(
-                    title = strings.settingDarkModeTitle,
-                    description = strings.settingDarkModeDesc,
-                    checked = settings.darkMode,
-                    onCheckedChange = onDarkModeChange,
-                    testTag = "switch_dark_mode"
-                )
-            }
-        }
-
-        // 5. About & Reset Settings
-        item {
-            GamingCard {
-                SectionHeader(
-                    icon = Icons.Default.Info,
-                    title = strings.settingsAboutSection
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Worm Temp Copier • Build v1.3.0 (ANS Server Control + Shizuku 13.1.5)",
-                    fontFamily = JetBrainsMonoFontFamily,
-                    fontSize = 12.sp,
-                    color = NeonGreen,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Default Target: $DEFAULT_PUFFER_TEMP_PATH",
-                    fontFamily = JetBrainsMonoFontFamily,
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                OutlinedButton(
-                    onClick = onResetSettings,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("reset_settings_btn"),
-                    border = BorderStroke(1.dp, ErrorRed),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.RestartAlt,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = strings.btnResetSettings,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SectionHeader(
-    icon: ImageVector,
-    title: String
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = NeonGreen,
-            modifier = Modifier.size(20.dp)
-        )
         Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
+            text = s.navSettings,
+            style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
             color = NeonGreen
         )
+
+        // Language
+        GamingCard {
+            Text(s.settingLanguageTitle, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LangButton("العربية", settings.languageCode == "ar") { onLanguageChange("ar") }
+                LangButton("English", settings.languageCode != "ar") { onLanguageChange("en") }
+            }
+        }
+
+        // Account (server-controlled)
+        GamingCard {
+            Text(s.settingsAccountSection, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Spacer(Modifier.height(6.dp))
+            val email = serverGateStatus.user?.email ?: authSession.email
+            if (authSession.isLoggedIn && email.isNotBlank()) {
+                Text(email, fontSize = 13.sp, color = TextSecondary)
+                Spacer(Modifier.height(8.dp))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onOpenAccountSheet) { Text(s.btnAccountAndPlan, fontSize = 12.sp) }
+                if (authSession.isLoggedIn) {
+                    OutlinedButton(onClick = onSignOut) { Text(s.btnSignOut, fontSize = 12.sp) }
+                }
+            }
+        }
+
+        // Developer & Telegram
+        GamingCard {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(s.settingsDeveloperLabel, fontWeight = FontWeight.Bold, color = TextPrimary)
+                Text(s.settingsDeveloperName, color = NeonGreen, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(s.settingsTelegramLabel, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Text(serverGateStatus.telegram.channelUsername, fontSize = 12.sp, color = TextSecondary)
+            Spacer(Modifier.height(8.dp))
+            Button(
+                onClick = { uriHandler.openUri(serverGateStatus.telegram.channelUrl) },
+                colors = ButtonDefaults.buttonColors(containerColor = NeonGreen, contentColor = ObsidianDark)
+            ) { Text(s.btnOpenTelegram) }
+        }
+
+        // Update check
+        GamingCard {
+            Button(
+                onClick = {
+                    checkedOnce = true
+                    onCheckUpdates()
+                },
+                enabled = !isGateChecking,
+                colors = ButtonDefaults.buttonColors(containerColor = NeonGreen, contentColor = ObsidianDark)
+            ) { Text(s.btnCheckUpdates) }
+            if (checkedOnce && !isGateChecking) {
+                Spacer(Modifier.height(8.dp))
+                val update = serverGateStatus.appUpdate
+                val msg = when {
+                    !serverGateStatus.isReachable -> s.updateCheckFailedMsg
+                    update != null -> "${s.updateAvailableMsg} ${update.versionName}"
+                    else -> s.updateUpToDateMsg
+                }
+                Text(msg, fontSize = 13.sp, color = TextPrimary)
+            }
+        }
+
+        // App info
+        GamingCard {
+            Text(s.settingsAppInfoTitle, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Spacer(Modifier.height(6.dp))
+            Text(s.appName, fontSize = 13.sp, color = TextPrimary)
+            Text(s.appTagline, fontSize = 12.sp, color = TextSecondary)
+            Spacer(Modifier.height(6.dp))
+            Text("${s.settingsVersionLabel}: ${BuildConfig.VERSION_NAME}", fontSize = 13.sp, color = TextPrimary)
+        }
+        Spacer(Modifier.height(8.dp))
     }
 }
 
 @Composable
-private fun SettingToggleRow(
-    title: String,
-    description: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    testTag: String
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            modifier = Modifier.testTag(testTag),
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = ObsidianDark,
-                checkedTrackColor = NeonGreen
-            )
-        )
+private fun LangButton(label: String, selected: Boolean, onClick: () -> Unit) {
+    if (selected) {
+        Button(
+            onClick = onClick,
+            colors = ButtonDefaults.buttonColors(containerColor = NeonGreen, contentColor = ObsidianDark)
+        ) { Text(label) }
+    } else {
+        OutlinedButton(onClick = onClick) { Text(label) }
     }
 }

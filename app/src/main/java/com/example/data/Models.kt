@@ -53,8 +53,7 @@ val PRESET_GAME_EDITIONS = listOf(
         key = GameEditionKey.PUBG_FLASH,
         title = "PUBG MOBILE FLASH",
         packageName = "com.tencent.igfit",
-        defaultPufferPath = "/storage/emulated/0/Android/data/com.tencent.igfit/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/Paks/puffer_temp",
-        isProposedOnly = true
+        defaultPufferPath = "/storage/emulated/0/Android/data/com.tencent.igfit/files/UE4Game/ShadowTrackerExtra/ShadowTrackerExtra/Saved/Paks/puffer_temp"
     )
 )
 
@@ -131,6 +130,18 @@ data class OperationHistoryEntity(
     val sha256Verified: Boolean = false,
     val usedShizuku: Boolean = false,
     val errorMessage: String? = null
+)
+
+@Entity(tableName = "usage_sessions")
+data class UsageSessionEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val timestamp: Long = System.currentTimeMillis(),
+    val editionKey: String,
+    val editionTitle: String,
+    val success: Boolean,
+    val durationMs: Long,
+    val filesCount: Int = 0,
+    val message: String? = null
 )
 
 @Entity(tableName = "error_logs")
@@ -222,6 +233,7 @@ data class ContentItem(
     val downloadUrl: String = "",
     val storagePath: String? = null,
     val compatibleEditions: List<GameEditionKey> = listOf(
+        GameEditionKey.PUBG_FLASH,
         GameEditionKey.PUBG_GLOBAL,
         GameEditionKey.PUBG_KOREA,
         GameEditionKey.PUBG_VIETNAM,

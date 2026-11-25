@@ -27,20 +27,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
-import androidx.compose.material.icons.filled.FolderCopy
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.HourglassBottom
-import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SportsEsports
-import androidx.compose.material.icons.outlined.FolderCopy
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.HourglassBottom
-import androidx.compose.material.icons.outlined.Route
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -66,25 +58,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.data.OperationType
-import com.example.data.GameEditionKey
-import com.example.data.PRESET_GAME_EDITIONS
 import com.example.ui.WormCopierViewModel
 import com.example.ui.components.AccountAuthAndSubscriptionDialog
 import com.example.ui.components.AppUpdateDialog
 import com.example.ui.components.MaintenanceBlockingOverlay
 import com.example.ui.components.SplashScreenOverlay
 import com.example.ui.components.TelegramGateDialog
-import com.example.ui.components.TransferConfirmationDialog
 import com.example.ui.i18n.ArabicStrings
 import com.example.ui.i18n.EnglishStrings
 import com.example.ui.i18n.LocalAppStrings
-import com.example.ui.screens.ContentCenterScreen
-import com.example.ui.screens.DashboardScreen
-import com.example.ui.screens.FileManagerScreen
-import com.example.ui.screens.HistoryScreen
-import com.example.ui.screens.PathsScreen
+import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.SettingsScreen
+import com.example.ui.screens.UsageScreen
 import com.example.ui.theme.ErrorRed
 import com.example.ui.theme.ErrorRedSurface
 import com.example.ui.theme.NeonGreen
@@ -101,11 +86,7 @@ enum class AppDestination(
     val unselectedIcon: ImageVector
 ) {
     HOME("home", Icons.Filled.Home, Icons.Outlined.Home),
-    FILES("files", Icons.Filled.FolderCopy, Icons.Outlined.FolderCopy),
-    PATHS("paths", Icons.Filled.Route, Icons.Outlined.Route),
-    CONTENT("content", Icons.Filled.SportsEsports, Icons.Outlined.SportsEsports),
-    AUTO_DELETE("autodelete", Icons.Filled.HourglassBottom, Icons.Outlined.HourglassBottom),
-    HISTORY("history", Icons.Filled.History, Icons.Outlined.History),
+    USAGE("usage", Icons.Filled.History, Icons.Outlined.History),
     SETTINGS("settings", Icons.Filled.Settings, Icons.Outlined.Settings)
 }
 
@@ -126,15 +107,8 @@ fun WormCopierApp(
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val shizukuStatus by viewModel.shizukuStatus.collectAsStateWithLifecycle()
-    val selectedFiles by viewModel.selectedFiles.collectAsStateWithLifecycle()
-    val fileSearchQuery by viewModel.fileSearchQuery.collectAsStateWithLifecycle()
-    val fileSortOption by viewModel.fileSortOption.collectAsStateWithLifecycle()
-    val savedPaths by viewModel.savedPaths.collectAsStateWithLifecycle()
-    val favoritePaths by viewModel.favoritePaths.collectAsStateWithLifecycle()
     val historyList by viewModel.operationHistory.collectAsStateWithLifecycle()
-    val errorLogs by viewModel.errorLogs.collectAsStateWithLifecycle()
-    val transferState by viewModel.transferState.collectAsStateWithLifecycle()
-    val pendingConfirmation by viewModel.pendingConfirmation.collectAsStateWithLifecycle()
+    val usageSessions by viewModel.usageSessions.collectAsStateWithLifecycle()
     val bannerMessage by viewModel.bannerMessage.collectAsStateWithLifecycle()
 
     val isArabic = settings.languageCode == "ar"
@@ -143,12 +117,7 @@ fun WormCopierApp(
     var showSplash by rememberSaveable { mutableStateOf(!skipSplashForTests) }
     var currentTab by rememberSaveable { mutableStateOf(AppDestination.HOME) }
 
-    val scheduledDeletions by viewModel.scheduledDeletions.collectAsStateWithLifecycle()
-    val gameEditionStatuses by viewModel.gameEditionStatuses.collectAsStateWithLifecycle()
     val telegramGateCompleted by viewModel.telegramGateCompleted.collectAsStateWithLifecycle()
-    val contentItems by viewModel.contentItems.collectAsStateWithLifecycle()
-    val downloadingItemId by viewModel.downloadingItemId.collectAsStateWithLifecycle()
-    val downloadProgress by viewModel.downloadProgress.collectAsStateWithLifecycle()
     val authSession by viewModel.authSession.collectAsStateWithLifecycle()
     val serverGateStatus by viewModel.serverGateStatus.collectAsStateWithLifecycle()
     val pubgInstallState by viewModel.pubgInstallState.collectAsStateWithLifecycle()
@@ -156,17 +125,6 @@ fun WormCopierApp(
     val isAuthBusy by viewModel.isAuthBusy.collectAsStateWithLifecycle()
     val showAccountSheet by viewModel.showAccountSheet.collectAsStateWithLifecycle()
     val dismissedOptionalUpdateCode by viewModel.dismissedOptionalUpdateCode.collectAsStateWithLifecycle()
-
-    val activeEditionKey = remember(settings.selectedGameEdition) {
-        try {
-            GameEditionKey.valueOf(settings.selectedGameEdition)
-        } catch (_: Exception) {
-            GameEditionKey.PUBG_GLOBAL
-        }
-    }
-    val activeEditionTitle = remember(activeEditionKey) {
-        PRESET_GAME_EDITIONS.find { it.key == activeEditionKey }?.title ?: "PUBG MOBILE"
-    }
 
     // Notification permission launcher for Android 13+
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -193,35 +151,8 @@ fun WormCopierApp(
         }
     }
 
-    // BackHandler for non-Home tabs
     BackHandler(enabled = currentTab != AppDestination.HOME) {
         currentTab = AppDestination.HOME
-    }
-
-    // System Document Pickers (Zero-storage-permission SAF contracts)
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenMultipleDocuments()
-    ) { uris ->
-        viewModel.onFilesPicked(uris)
-    }
-
-    val folderPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree()
-    ) { treeUri ->
-        if (treeUri != null) {
-            viewModel.onDestinationFolderPicked(treeUri)
-        }
-    }
-
-    val currentPathAccessStatus = remember(
-        settings.activeDestinationPath,
-        settings.activeDestinationTreeUri,
-        shizukuStatus
-    ) {
-        viewModel.getPathAccessStatus(
-            settings.activeDestinationPath,
-            settings.activeDestinationTreeUri
-        )
     }
 
     CompositionLocalProvider(LocalAppStrings provides appStrings) {
@@ -244,11 +175,7 @@ fun WormCopierApp(
                                 val isSelected = currentTab == dest
                                 val labelText = when (dest) {
                                     AppDestination.HOME -> appStrings.navHome
-                                    AppDestination.FILES -> appStrings.navFiles
-                                    AppDestination.PATHS -> appStrings.navPaths
-                                    AppDestination.CONTENT -> appStrings.navContentCenter
-                                    AppDestination.AUTO_DELETE -> appStrings.navAutoDelete
-                                    AppDestination.HISTORY -> appStrings.navHistory
+                                    AppDestination.USAGE -> appStrings.navUsage
                                     AppDestination.SETTINGS -> appStrings.navSettings
                                 }
                                 NavigationBarItem(
@@ -264,7 +191,7 @@ fun WormCopierApp(
                                     label = {
                                         Text(
                                             text = labelText,
-                                            fontSize = 10.sp,
+                                            fontSize = 11.sp,
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                             maxLines = 1
                                         )
@@ -292,121 +219,37 @@ fun WormCopierApp(
                             label = "screen_crossfade"
                         ) { destination ->
                             when (destination) {
-                                AppDestination.HOME -> DashboardScreen(
+                                AppDestination.HOME -> HomeScreen(
                                     shizukuStatus = shizukuStatus,
-                                    selectedFiles = selectedFiles,
-                                    settings = settings,
-                                    favoritePaths = favoritePaths,
-                                    pathAccessStatus = currentPathAccessStatus,
-                                    transferState = transferState,
-                                    onConnectShizuku = viewModel::connectOrRequestShizukuPermission,
-                                    onRefreshShizuku = viewModel::refreshShizuku,
-                                    onPickFiles = { filePickerLauncher.launch(arrayOf("*/*")) },
-                                    onGenerateTestFiles = viewModel::generateSampleTestFiles,
-                                    onClearSelection = viewModel::clearSelectedFiles,
-                                    onPickDestinationFolder = { folderPickerLauncher.launch(null) },
-                                    onSetManualDestination = { path ->
-                                        viewModel.setActiveDestinationPath(path)
-                                    },
-                                    onResetDefaultPath = viewModel::resetToDefaultDestinationPath,
-                                    onSelectGameEdition = viewModel::selectGameEdition,
-                                    onToggleAutoDelete = viewModel::setAutoDeleteEnabled,
-                                    onSetRetentionMinutes = viewModel::setDefaultRetentionMinutes,
-                                    onStartCopy = { viewModel.requestStartTransfer(OperationType.COPY) },
-                                    onStartMove = { viewModel.requestStartTransfer(OperationType.MOVE) },
-                                    onCancelTransfer = viewModel::cancelActiveTransfer,
-                                    onNavigateToFiles = { currentTab = AppDestination.FILES },
-                                    onNavigateToSettings = { currentTab = AppDestination.SETTINGS },
-                                    onToggleLanguage = viewModel::toggleLanguage,
+                                    selectedEditionKey = settings.selectedGameEdition,
                                     serverGateStatus = serverGateStatus,
                                     authSession = authSession,
-                                    pubgInstallState = pubgInstallState,
+                                    installState = pubgInstallState,
                                     isGateChecking = isGateChecking,
-                                    onRefreshServerGate = { viewModel.refreshServerGate(silent = false) },
+                                    operationHistory = historyList,
+                                    lastDurationMs = usageSessions.firstOrNull()?.durationMs,
+                                    onConnectShizuku = viewModel::connectOrRequestShizukuPermission,
+                                    onRefreshShizuku = viewModel::refreshShizuku,
+                                    onSelectEdition = viewModel::selectGameEdition,
+                                    onStartInstall = { viewModel.startServerPubgInstall() },
                                     onOpenAccountSheet = viewModel::openAccountSheet,
-                                    onStartServerPubgInstall = { viewModel.startServerPubgInstall() },
+                                    onRefreshServerGate = { viewModel.refreshServerGate(silent = false) },
                                     onLaunchPubg = viewModel::launchPubg
                                 )
 
-                                AppDestination.FILES -> FileManagerScreen(
-                                    files = selectedFiles,
-                                    searchQuery = fileSearchQuery,
-                                    sortOption = fileSortOption,
-                                    onSearchQueryChange = viewModel::setFileSearchQuery,
-                                    onSortOptionChange = viewModel::setFileSortOption,
-                                    onToggleFileSelection = viewModel::toggleFileSelection,
-                                    onSelectAll = viewModel::selectAllFiles,
-                                    onRemoveFile = viewModel::removeFileFromQueue,
-                                    onComputeFileHash = viewModel::computeSingleFileSha256,
-                                    onPickMoreFiles = { filePickerLauncher.launch(arrayOf("*/*")) },
-                                    onGenerateTestFiles = viewModel::generateSampleTestFiles
-                                )
-
-                                AppDestination.PATHS -> PathsScreen(
-                                    savedPaths = savedPaths,
-                                    activeDestinationPath = settings.activeDestinationPath,
-                                    gameEditionStatuses = gameEditionStatuses,
-                                    shizukuReady = shizukuStatus.isReadyForElevatedOps,
-                                    checkPathAccess = viewModel::getPathAccessStatus,
-                                    onSelectGameEdition = viewModel::selectGameEdition,
-                                    onChangeGameEditionPath = viewModel::updateGameEditionPath,
-                                    onSelectActivePath = { saved ->
-                                        viewModel.setActiveDestinationPath(
-                                            path = saved.path,
-                                            treeUriString = saved.treeUriString,
-                                            label = saved.name
-                                        )
-                                    },
-                                    onAddCustomPath = viewModel::addCustomPath,
-                                    onEditSavedPath = viewModel::updateSavedPath,
-                                    onToggleFavorite = viewModel::toggleFavoritePath,
-                                    onDeletePath = viewModel::deleteSavedPath
-                                )
-
-                                AppDestination.CONTENT -> ContentCenterScreen(
-                                    contentItems = contentItems,
-                                    currentEditionKey = activeEditionKey,
-                                    activeEditionTitle = activeEditionTitle,
-                                    downloadingItemId = downloadingItemId,
-                                    downloadProgress = downloadProgress,
-                                    onUseContentItem = viewModel::useContentItem,
-                                    onSyncServer = { viewModel.refreshServerGate(silent = false) }
-                                )
-
-                                AppDestination.AUTO_DELETE -> com.example.ui.screens.AutoDeleteScreen(
-                                    settings = settings,
-                                    scheduledList = scheduledDeletions,
-                                    onToggleAutoDelete = viewModel::setAutoDeleteEnabled,
-                                    onSetDefaultRetention = viewModel::setDefaultRetentionMinutes,
-                                    onCancelSchedule = viewModel::cancelScheduledDeletion,
-                                    onDeleteNow = viewModel::deleteScheduledCopyNow,
-                                    onClearFinished = viewModel::clearFinishedScheduledDeletions
-                                )
-
-                                AppDestination.HISTORY -> HistoryScreen(
-                                    historyList = historyList,
-                                    errorLogs = errorLogs,
-                                    onClearAll = viewModel::clearHistoryAndLogs
+                                AppDestination.USAGE -> UsageScreen(
+                                    sessions = usageSessions,
+                                    onClear = viewModel::clearHistoryAndLogs
                                 )
 
                                 AppDestination.SETTINGS -> SettingsScreen(
                                     settings = settings,
-                                    shizukuStatus = shizukuStatus,
-                                    onAutoShizukuChange = viewModel::setAutoUseShizuku,
-                                    onConnectShizuku = viewModel::connectOrRequestShizukuPermission,
-                                    onConfirmOverwriteChange = viewModel::setConfirmOverwrite,
-                                    onVerifySha256Change = viewModel::setVerifySha256,
-                                    onVibrateFailureChange = viewModel::setVibrateOnFailure,
-                                    onKeepHistoryChange = viewModel::setKeepHistory,
-                                    onLanguageChange = viewModel::setLanguage,
-                                    onDarkModeChange = viewModel::setDarkMode,
-                                    onResetSettings = {
-                                        viewModel.resetAllSettings(appStrings.resetSettingsConfirmMsg)
-                                    },
                                     authSession = authSession,
                                     serverGateStatus = serverGateStatus,
+                                    isGateChecking = isGateChecking,
+                                    onLanguageChange = viewModel::setLanguage,
+                                    onCheckUpdates = { viewModel.refreshServerGate(silent = false) },
                                     onOpenAccountSheet = viewModel::openAccountSheet,
-                                    onRefreshServerGate = { viewModel.refreshServerGate(silent = false) },
                                     onSignOut = viewModel::signOut
                                 )
                             }
@@ -456,19 +299,6 @@ fun WormCopierApp(
                             }
                         }
                     }
-                }
-
-                // Move / Overwrite Confirmation Dialog
-                pendingConfirmation?.let { pending ->
-                    val selectedCount = selectedFiles.count { it.isSelected }
-                    TransferConfirmationDialog(
-                        pending = pending,
-                        destinationPath = settings.activeDestinationPath,
-                        selectedCount = selectedCount,
-                        onConfirmOverwriteAll = { viewModel.confirmPendingTransfer(skipExisting = false) },
-                        onConfirmSkipExisting = { viewModel.confirmPendingTransfer(skipExisting = true) },
-                        onDismiss = viewModel::dismissPendingConfirmation
-                    )
                 }
 
                 // Animated Opening Splash Screen

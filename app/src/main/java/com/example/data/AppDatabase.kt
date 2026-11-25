@@ -51,6 +51,18 @@ interface OperationHistoryDao {
 }
 
 @Dao
+interface UsageSessionDao {
+    @Query("SELECT * FROM usage_sessions ORDER BY timestamp DESC LIMIT 500")
+    fun getAllSessions(): Flow<List<UsageSessionEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSession(entry: UsageSessionEntity)
+
+    @Query("DELETE FROM usage_sessions")
+    suspend fun clearAllSessions()
+}
+
+@Dao
 interface ErrorLogDao {
     @Query("SELECT * FROM error_logs ORDER BY timestamp DESC LIMIT 200")
     fun getAllLogs(): Flow<List<ErrorLogEntity>>
@@ -100,9 +112,10 @@ interface ScheduledDeletionDao {
         SavedPathEntity::class,
         OperationHistoryEntity::class,
         ErrorLogEntity::class,
-        ScheduledDeletionEntity::class
+        ScheduledDeletionEntity::class,
+        UsageSessionEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -110,6 +123,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun operationHistoryDao(): OperationHistoryDao
     abstract fun errorLogDao(): ErrorLogDao
     abstract fun scheduledDeletionDao(): ScheduledDeletionDao
+    abstract fun usageSessionDao(): UsageSessionDao
 
     companion object {
         @Volatile
@@ -152,6 +166,14 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `usage_sessions` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `timestamp` INTEGER NOT NULL, `editionKey` TEXT NOT NULL, `editionTitle` TEXT NOT NULL, `success` INTEGER NOT NULL, `durationMs` INTEGER NOT NULL, `filesCount` INTEGER NOT NULL, `message` TEXT)"
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -159,7 +181,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "worm_temp_copier.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                 INSTANCE = instance
                 instance

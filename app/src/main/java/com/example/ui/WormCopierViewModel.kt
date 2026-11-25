@@ -65,6 +65,7 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
     private val savedPathDao = database.savedPathDao()
     private val historyDao = database.operationHistoryDao()
     private val errorLogDao = database.errorLogDao()
+    private val usageSessionDao = database.usageSessionDao()
     private val scheduledDeletionDao = database.scheduledDeletionDao()
 
     val settingsRepository = SettingsRepository(application)
@@ -101,6 +102,12 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptyList()
+    )
+
+    val usageSessions: StateFlow<List<com.example.data.UsageSessionEntity>> = usageSessionDao.getAllSessions().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        emptyList()
     )
 
     val scheduledDeletions: StateFlow<List<ScheduledDeletionEntity>> = scheduledDeletionDao.getPendingDeletions().stateIn(
@@ -312,6 +319,9 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
         if (_pubgInstallState.value.isRunning) return
         viewModelScope.launch {
             val currentSettings = settingsRepository.settingsFlow.first()
+            val startedAt = System.currentTimeMillis()
+            val sessionEdition = PRESET_GAME_EDITIONS.find { it.key.name == currentSettings.selectedGameEdition }
+                ?: PRESET_GAME_EDITIONS.first()
             val result = pubgOrchestrator.runTenStepAutoInstall(
                 settings = currentSettings,
                 specificItems = specificItems
@@ -323,9 +333,29 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
                 if (currentSettings.keepHistory) {
                     res.historyEntries.forEach { historyDao.insertHistory(it) }
                 }
+                usageSessionDao.insertSession(
+                    com.example.data.UsageSessionEntity(
+                        editionKey = sessionEdition.key.name,
+                        editionTitle = sessionEdition.title,
+                        success = true,
+                        durationMs = System.currentTimeMillis() - startedAt,
+                        filesCount = res.historyEntries.size,
+                        message = res.message
+                    )
+                )
                 showBanner(res.message, isError = false)
             }.onFailure { err ->
                 val msg = err.localizedMessage ?: "PUBG installation failed"
+                usageSessionDao.insertSession(
+                    com.example.data.UsageSessionEntity(
+                        editionKey = sessionEdition.key.name,
+                        editionTitle = sessionEdition.title,
+                        success = false,
+                        durationMs = System.currentTimeMillis() - startedAt,
+                        filesCount = 0,
+                        message = msg
+                    )
+                )
                 logError("PUBG_SERVER_INSTALL", msg, currentSettings.selectedGameEdition)
                 triggerFailureVibrationIfEnabled(currentSettings.vibrateOnFailure)
                 showBanner(msg, isError = true)
@@ -1091,6 +1121,7 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             historyDao.clearAllHistory()
             errorLogDao.clearAllLogs()
+            usageSessionDao.clearAllSessions()
         }
     }
 
