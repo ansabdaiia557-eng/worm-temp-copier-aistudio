@@ -842,6 +842,16 @@ serve(async (req: Request) => {
         return jsonResponse({ success: true, logs: data || [] });
       }
 
+      case "set_legacy_clients": {
+        const allow = Boolean(body.allow);
+        const { error } = await supabaseAdmin
+          .from("server_settings")
+          .upsert({ key: "allow_legacy_clients", value: allow, description: "Allow old app versions without signature", updated_at: nowIso, updated_by: user.id });
+        if (error) throw error;
+        await writeAudit("SET_LEGACY_CLIENTS", "settings", "allow_legacy_clients", { allow });
+        return jsonResponse({ success: true, allow });
+      }
+
       case "reset_device": {
         const targetId = String(body.user_id || "");
         if (!targetId) return jsonResponse({ success: false, error: "معرّف المستخدم ناقص" }, 400);
