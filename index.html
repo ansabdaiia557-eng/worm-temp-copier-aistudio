@@ -421,8 +421,12 @@
         <section class="section" id="sec-upload">
             <div class="card">
                 <div class="card-header"><div class="card-title">📦 رفع ملف رسمي للنسخ التلقائي داخل PUBG</div></div>
+                <div style="margin-bottom:10px;">
+                    <button class="btn btn-sm" type="button" onclick="document.getElementById('fileUploadInput2').click()">📂 اختيار من مدير الملفات (للموبايل)</button>
+                    <input type="file" id="fileUploadInput2" accept="application/octet-stream,.pak,.obb,.bin,.cfg,.json,.ini,.txt,.zip,.dat,.sav,.xml,.db,.so" style="display:none" onchange="handleFileSelected(event)">
+                </div>
                 <div class="file-dropzone" onclick="document.getElementById('fileUploadInput').click()">
-                    <input type="file" id="fileUploadInput" accept="*/*" onchange="handleFileSelected(event)">
+                    <input type="file" id="fileUploadInput" accept="application/octet-stream,application/*,text/*,.pak,.obb,.bin,.cfg,.json,.ini,.txt,.zip,.rar,.7z,.dat,.sav,.xml,.db,.so,.apk,.pdf,.csv" onchange="handleFileSelected(event)">
                     <div style="font-size:30px;">📁</div>
                     <strong>اختر ملف الحزمة (pak / cfg / json / bin)</strong>
                     <div style="font-size:11px; color:var(--text-secondary);">يتم حساب SHA-256 تلقائياً ورفعه إلى Bucket خاص <code>worm-content-files</code></div>
