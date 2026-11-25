@@ -333,6 +333,7 @@
                         <div class="row-actions">
                             <input type="text" id="newCodeInput" class="mono" placeholder="ANS-PRO-2026">
                             <button class="btn btn-outline btn-sm" type="button" onclick="generateRandomCode()">توليد تلقائي</button>
+                            <button class="btn btn-outline btn-sm" type="button" title="نسخ الكود" onclick="copyCode(document.getElementById('newCodeInput').value)">📋 نسخ</button>
                         </div>
                     </div>
                     <div class="form-group">
@@ -921,6 +922,21 @@ function generateRandomCode() {
     document.getElementById('newCodeInput').value = `ANS-${part()}-${part()}`;
 }
 
+async function copyCode(text) {
+    text = String(text || '').trim();
+    if (!text) { showToast('مفيش كود للنسخ', true); return; }
+    try {
+        await navigator.clipboard.writeText(text);
+    } catch (e) {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); } catch (_) {}
+        document.body.removeChild(ta);
+    }
+    showToast('تم نسخ الكود: ' + text);
+}
+
 async function createActivationCode() {
     try {
         const expRaw = document.getElementById('newCodeExpires').value;
@@ -932,7 +948,8 @@ async function createActivationCode() {
             description: document.getElementById('newCodeDesc').value.trim(),
             expires_at: expRaw ? new Date(expRaw).toISOString() : null
         });
-        showToast('تم إنشاء كود التفعيل ✓');
+        const created = document.getElementById('newCodeInput').value.trim().toUpperCase();
+        await copyCode(created);
         loadActivationCodes();
     } catch (e) { showToast(e.message, true); }
 }
@@ -944,7 +961,7 @@ async function loadActivationCodes() {
             callAdminApi('list_activation_logs')
         ]);
         document.getElementById('codesTableBody').innerHTML = codes.map(c => `<tr>
-            <td class="mono" style="color:var(--neon-green); font-weight:700;">${escapeHtml(c.code)}</td>
+            <td class="mono" style="color:var(--neon-green); font-weight:700;">${escapeHtml(c.code)} <button class="btn btn-outline btn-sm" type="button" title="نسخ الكود" onclick="copyCode('${escapeHtml(c.code)}')">📋</button></td>
             <td>${escapeHtml(c.code_type)}</td>
             <td class="mono">${c.current_uses} / ${c.max_uses}</td>
             <td>${c.duration_days} يوم</td>
