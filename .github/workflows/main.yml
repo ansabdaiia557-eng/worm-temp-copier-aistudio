@@ -1,11 +1,10 @@
 
 name: Build Android APK
 
+# Manual only: the "Android APK Build - Worm Temp Copier" workflow publishes the real release
+# with a matching versionCode. This one must not produce a second, differently-numbered APK.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
 
 jobs:
   build:
@@ -52,6 +51,8 @@ jobs:
           fi
 
       - name: Build APK
+        env:
+          VERSION_CODE: ${{ github.run_number }}
         run: ./gradlew assembleDebug
 
       - name: Upload APK

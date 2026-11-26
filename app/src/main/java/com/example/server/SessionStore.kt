@@ -28,6 +28,7 @@ class SessionStore(private val context: Context) {
         val LAST_GLOBAL_REV = intPreferencesKey("last_global_file_revision")
         val LAST_VERIFIED_EDITION = stringPreferencesKey("last_verified_pubg_edition")
         val LAST_VERIFIED_COPY_AT = longPreferencesKey("last_verified_copy_at")
+        val DISMISSED_UPDATE_CODE = intPreferencesKey("dismissed_optional_update_code")
     }
 
     val sessionFlow: Flow<AuthSessionState> = context.serverSessionStore.data.map { prefs ->
@@ -46,6 +47,13 @@ class SessionStore(private val context: Context) {
 
     val lastVerifiedPubgEditionFlow: Flow<String?> = context.serverSessionStore.data.map { prefs ->
         prefs[Keys.LAST_VERIFIED_EDITION]
+    }
+
+    suspend fun getDismissedUpdateCode(): Int =
+        context.serverSessionStore.data.first()[Keys.DISMISSED_UPDATE_CODE] ?: 0
+
+    suspend fun setDismissedUpdateCode(code: Int) {
+        context.serverSessionStore.edit { prefs -> prefs[Keys.DISMISSED_UPDATE_CODE] = code }
     }
 
     suspend fun getSession(): AuthSessionState = sessionFlow.first()

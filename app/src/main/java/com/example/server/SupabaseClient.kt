@@ -229,7 +229,11 @@ class SupabaseClient(
                         errorMessage = raw.take(200)
                     )
                 }
-                val parsed = parseServerGateJson(JSONObject(raw))
+                val parsed0 = parseServerGateJson(JSONObject(raw))
+                // Only ever offer an update that is strictly newer than the installed build.
+                val parsed = parsed0.copy(
+                    appUpdate = parsed0.appUpdate?.takeIf { it.versionCode > BuildConfig.VERSION_CODE }
+                )
                 if (parsed.appUpdate == null) parsed.copy(appUpdate = fetchGithubUpdate()) else parsed
             }
         } catch (t: Throwable) {

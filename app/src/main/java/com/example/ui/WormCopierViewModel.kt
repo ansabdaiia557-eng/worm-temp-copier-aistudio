@@ -175,6 +175,11 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
     private val _dismissedOptionalUpdateCode = MutableStateFlow(0)
     val dismissedOptionalUpdateCode: StateFlow<Int> = _dismissedOptionalUpdateCode.asStateFlow()
 
+    init {
+        // A "later" tap on an optional update survives app restarts (until a newer build appears).
+        viewModelScope.launch { _dismissedOptionalUpdateCode.value = sessionStore.getDismissedUpdateCode() }
+    }
+
     val contentItems: StateFlow<List<ContentItem>> = contentRepository.itemsFlow.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -209,6 +214,7 @@ class WormCopierViewModel(application: Application) : AndroidViewModel(applicati
 
     fun dismissOptionalAppUpdate(versionCode: Int) {
         _dismissedOptionalUpdateCode.value = versionCode
+        viewModelScope.launch { sessionStore.setDismissedUpdateCode(versionCode) }
     }
 
     fun refreshServerGate(silent: Boolean = false) {
