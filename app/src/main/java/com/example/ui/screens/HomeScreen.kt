@@ -123,7 +123,7 @@ fun HomeScreen(
             text = s.appName,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
-            color = NeonGreen
+            color = TextPrimary
         )
 
         // 1. Shizuku status & permissions
