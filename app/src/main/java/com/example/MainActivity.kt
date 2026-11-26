@@ -91,8 +91,33 @@ enum class AppDestination(
 }
 
 class MainActivity : ComponentActivity() {
+    // On-device signature self-check. Fails open if the signature cannot be read.
+    @Suppress("DEPRECATION")
+    private fun integritySelfCheck(): Boolean {
+        return try {
+            val sigs = if (android.os.Build.VERSION.SDK_INT >= 28) {
+                packageManager.getPackageInfo(packageName, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES).signingInfo?.apkContentsSigners
+            } else {
+                packageManager.getPackageInfo(packageName, android.content.pm.PackageManager.GET_SIGNATURES).signatures
+            }
+            val first = sigs?.firstOrNull() ?: return true
+            val got = java.security.MessageDigest.getInstance("SHA-256").digest(first.toByteArray())
+                .joinToString("") { "%02x".format(it) }
+            got == EXPECTED_SIG
+        } catch (_: Throwable) { true }
+    }
+
+    private companion object {
+        private const val EXPECTED_SIG = "631e2c62058b87f8f63c24d93ab217a051500c9dd69d919468b37484195ed9e4"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!integritySelfCheck()) {
+            android.widget.Toast.makeText(this, "نسخة غير رسمية. نزّل النسخة الرسمية من القناة.", android.widget.Toast.LENGTH_LONG).show()
+            finishAndRemoveTask()
+            return
+        }
         enableEdgeToEdge()
         setContent {
             WormCopierApp()
