@@ -1,8 +1,22 @@
 name: Android APK Build - Worm Temp Copier
 
+# Only app changes may build/publish an APK. Backend-only pushes (supabase migrations/functions,
+# admin dashboard, other workflows) must not bump the build number or replace the "latest" release,
+# otherwise every backend commit looks like a new app update to installed apps.
+concurrency:
+  group: apk-release-${{ github.ref }}
+  cancel-in-progress: false
+
 on:
   push:
     branches: [ "main", "master" ]
+    paths-ignore:
+      - "app/supabase/**"
+      - "app/admin-dashboard/**"
+      - ".github/workflows/supabase-deploy.yml"
+      - ".github/workflows/screenshot.yml"
+      - ".github/workflows/main.yml"
+      - "**/*.md"
   pull_request:
     branches: [ "main", "master" ]
   workflow_dispatch:
