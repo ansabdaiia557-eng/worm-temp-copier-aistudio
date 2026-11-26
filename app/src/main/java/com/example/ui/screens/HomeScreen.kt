@@ -50,6 +50,9 @@ import com.example.shizuku.ShizukuStatus
 import com.example.ui.components.GamingCard
 import com.example.ui.i18n.LocalAppStrings
 import com.example.ui.theme.CarbonBorder
+import com.example.ui.theme.GlassMint
+import com.example.ui.theme.GlassViolet
+import androidx.compose.ui.graphics.Color
 import com.example.ui.theme.ErrorRed
 import com.example.ui.theme.NeonGreen
 import com.example.ui.theme.ObsidianDark
@@ -124,7 +127,7 @@ fun HomeScreen(
         )
 
         // 1. Shizuku status & permissions
-        GamingCard(glowBorderColor = if (shizukuStatus.isReadyForElevatedOps) NeonGreen else CarbonBorder) {
+        GamingCard(glowBorderColor = if (shizukuStatus.isReadyForElevatedOps) GlassMint else CarbonBorder) {
             Text(s.shizukuStatusTitle, fontWeight = FontWeight.Bold, color = TextPrimary)
             Spacer(Modifier.height(8.dp))
             StatusLine(
@@ -155,7 +158,7 @@ fun HomeScreen(
             gate.subscription.required && !gate.subscription.isActive -> s.subscriptionInactiveBadge
             else -> null
         }
-        GamingCard(glowBorderColor = if (blockedText == null) NeonGreen else WarningOrange) {
+        GamingCard(glowBorderColor = if (blockedText == null) GlassMint else WarningOrange) {
             Text(s.ansServerControlTitle, fontWeight = FontWeight.Bold, color = TextPrimary)
             Spacer(Modifier.height(8.dp))
             StatusLine(
@@ -190,8 +193,8 @@ fun HomeScreen(
                         }
                         .testTag("edition_${edition.key.name}"),
                     shape = RoundedCornerShape(12.dp),
-                    color = if (picked) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, if (picked) NeonGreen else CarbonBorder)
+                    color = if (picked) Color(0x338F7BFF) else Color(0x14FFFFFF),
+                    border = BorderStroke(1.dp, if (picked) GlassViolet else CarbonBorder)
                 ) {
                     Row(
                         modifier = Modifier.padding(12.dp),
@@ -327,7 +330,7 @@ fun HomeScreen(
                         Icon(
                             imageVector = if (ok) Icons.Filled.CheckCircle else Icons.Filled.Error,
                             contentDescription = null,
-                            tint = if (ok) NeonGreen else ErrorRed,
+                            tint = if (ok) GlassMint else ErrorRed,
                             modifier = Modifier.size(18.dp)
                         )
                         Column {
@@ -360,7 +363,7 @@ private fun StatusLine(ok: Boolean, text: String) {
         Icon(
             imageVector = if (ok) Icons.Filled.CheckCircle else Icons.Filled.Error,
             contentDescription = null,
-            tint = if (ok) NeonGreen else WarningOrange,
+            tint = if (ok) GlassMint else WarningOrange,
             modifier = Modifier.size(18.dp)
         )
         Text(text, fontSize = 13.sp, color = TextPrimary)

@@ -2,29 +2,37 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Core Dark Gaming Utility Palette (from specification)
-val ObsidianDark = Color(0xFF0B0D0F)       // اللون الأساسي: أسود داكن "#0B0D0F"
-val CarbonCard = Color(0xFF15191D)         // لون البطاقات: "#15191D"
-val CarbonCardElevated = Color(0xFF1C2228) // طبقة بطاقات مرتفعة
-val CarbonBorder = Color(0xFF262F38)       // حدود دقيقة للبطاقات
+// Glassmorphism palette: deep purple / cyan gradients, frosted translucent surfaces.
+// Legacy identifiers are kept so screens compile unchanged; only their values changed.
+val GlassPurpleDeep = Color(0xFF1A0B4B)
+val GlassIndigo = Color(0xFF0B0A2E)
+val GlassTealDeep = Color(0xFF04222F)
+val GlassViolet = Color(0xFF8F7BFF)
+val GlassCyan = Color(0xFF22D3FF)
+val GlassMint = Color(0xFF4DFFB0)
 
-val NeonGreen = Color(0xFF00E676)          // اللون المميز: أخضر نيون "#00E676"
-val NeonGreenDim = Color(0xFF00C853)       // درجة أخضر داكنة للتدرج
-val NeonGreenGlow = Color(0x3300E676)      // توهج أخضر خفيف للعناصر النشطة
-val NeonGreenSurface = Color(0xFF0D2418)   // خلفية خضراء داكنة للشارات
+val ObsidianDark = Color(0xFF0A0620)       // text on bright accent + base background
+val CarbonCard = Color(0xFF1B1440)         // opaque surface (dialogs)
+val CarbonCardElevated = Color(0x1AFFFFFF) // frosted fill
+val CarbonBorder = Color(0x33FFFFFF)       // glass hairline
 
-val TacticalCyan = Color(0xFF00B0FF)       // لون مميز لعملية MOVE وروابط المسارات
-val TacticalCyanSurface = Color(0xFF0C222E)
+val NeonGreen = GlassViolet                // primary accent (was neon green)
+val NeonGreenDim = Color(0xFF6C5CE7)
+val NeonGreenGlow = Color(0x338F7BFF)
+val NeonGreenSurface = Color(0x338F7BFF)
 
-val TextPrimary = Color(0xFFF5F5F5)        // لون النص الرئيسي: أبيض "#F5F5F5"
-val TextSecondary = Color(0xFF92999F)      // لون النص الثانوي: رمادي "#92999F"
-val TextMuted = Color(0xFF636B72)
+val TacticalCyan = GlassCyan
+val TacticalCyanSurface = Color(0x3322D3FF)
 
-val WarningOrange = Color(0xFFFF9100)      // لون التحذيرات: برتقالي
-val WarningOrangeSurface = Color(0xFF2C1E0B)
+val TextPrimary = Color(0xFFFFFFFF)
+val TextSecondary = Color(0xB3E6E3FF)
+val TextMuted = Color(0x80E6E3FF)
 
-val ErrorRed = Color(0xFFFF5252)           // لون الأخطاء: أحمر
-val ErrorRedSurface = Color(0xFF2D1215)
+val WarningOrange = Color(0xFFFFB74D)
+val WarningOrangeSurface = Color(0x33FFB74D)
+
+val ErrorRed = Color(0xFFFF6B7A)
+val ErrorRedSurface = Color(0x33FF6B7A)
 
 // Aliases for Dark Gaming Theme
 val ObsidianCard = CarbonCard

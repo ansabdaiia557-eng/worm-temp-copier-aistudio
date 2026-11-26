@@ -190,11 +190,11 @@ fun WormCopierApp(
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     contentWindowInsets = WindowInsets.safeDrawing,
-                    containerColor = MaterialTheme.colorScheme.background,
+                    containerColor = androidx.compose.ui.graphics.Color.Transparent,
                     bottomBar = {
                         NavigationBar(
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            tonalElevation = 8.dp,
+                            containerColor = androidx.compose.ui.graphics.Color(0x331B1440),
+                            tonalElevation = 0.dp,
                             modifier = Modifier.testTag("bottom_navigation_bar")
                         ) {
                             AppDestination.entries.forEach { dest ->

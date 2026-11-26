@@ -33,9 +33,9 @@ private val DarkGamingColorScheme = darkColorScheme(
     onBackground = TextPrimary,
     surface = CarbonCard,
     onSurface = TextPrimary,
-    surfaceVariant = CarbonCardElevated,
+    surfaceVariant = Color(0x26FFFFFF),
     onSurfaceVariant = TextSecondary,
-    outline = CarbonBorder
+    outline = Color(0x40FFFFFF)
 )
 
 private val LightUtilityColorScheme = lightColorScheme(
@@ -59,10 +59,10 @@ private val LightUtilityColorScheme = lightColorScheme(
 )
 
 val AppShapes = Shapes(
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(20.dp),
-    extraLarge = RoundedCornerShape(26.dp)
+    small = RoundedCornerShape(14.dp),
+    medium = RoundedCornerShape(20.dp),
+    large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(30.dp)
 )
 
 @Composable
@@ -78,8 +78,13 @@ fun WormTempCopierTheme(
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,
-            shapes = AppShapes,
-            content = content
-        )
+            shapes = AppShapes
+        ) {
+            if (darkTheme) {
+                GlassScene(content)
+            } else {
+                content()
+            }
+        }
     }
 }

@@ -71,6 +71,10 @@ import com.example.data.PathAccessStatus
 import com.example.ui.PendingTransferConfirmation
 import com.example.ui.i18n.LocalAppStrings
 import com.example.ui.theme.CarbonBorder
+import com.example.ui.theme.GlassCyan
+import com.example.ui.theme.GlassMint
+import com.example.ui.theme.GlassViolet
+import com.example.ui.theme.GlassSurface
 import com.example.ui.theme.ErrorRed
 import com.example.ui.theme.ErrorRedSurface
 import com.example.ui.theme.JetBrainsMonoFontFamily
@@ -91,17 +95,15 @@ fun GamingCard(
     containerColor: Color = MaterialTheme.colorScheme.surface,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Card(
+    GlassSurface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = containerColor),
-        border = BorderStroke(1.dp, glowBorderColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(24.dp),
+        edgeTint = if (glowBorderColor == CarbonBorder) GlassCyan else glowBorderColor
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(18.dp),
             content = content
         )
     }
@@ -151,8 +153,8 @@ fun PathAccessStatusBadge(
     val strings = LocalAppStrings.current
     val (bgColor, textColor, icon, text) = when (status) {
         PathAccessStatus.DIRECT_WRITABLE -> Quad(
-            NeonGreenSurface,
-            NeonGreen,
+            Color(0x334DFFB0),
+            GlassMint,
             Icons.Default.VerifiedUser,
             strings.pathStatusDirectWritable
         )
@@ -164,8 +166,8 @@ fun PathAccessStatusBadge(
         )
         PathAccessStatus.NEEDS_SHIZUKU -> if (shizukuReady) {
             Quad(
-                NeonGreenSurface,
-                NeonGreen,
+                Color(0x334DFFB0),
+                GlassMint,
                 Icons.Default.Security,
                 "Shizuku Ready • ${strings.pathStatusNeedsShizuku}"
             )
@@ -224,9 +226,9 @@ fun FileExtensionBadgeIcon(
         "pak", "obb", "dat", "bin" -> Triple(NeonGreen, NeonGreenSurface, Icons.Default.Memory)
         "cfg", "ini", "conf", "prop" -> Triple(TacticalCyan, TacticalCyanSurface, Icons.Default.SettingsSuggest)
         "json", "xml", "txt", "log" -> Triple(WarningOrange, WarningOrangeSurface, Icons.Default.Code)
-        "zip", "rar", "7z", "tar" -> Triple(Color(0xFFE040FB), Color(0xFF2A1230), Icons.Default.Archive)
-        "png", "jpg", "jpeg", "webp" -> Triple(Color(0xFF00E5FF), Color(0xFF0B262B), Icons.Default.Image)
-        else -> Triple(TextSecondary, Color(0xFF1F262E), Icons.Default.Description)
+        "zip", "rar", "7z", "tar" -> Triple(Color(0xFFE040FB), Color(0x33E040FB), Icons.Default.Archive)
+        "png", "jpg", "jpeg", "webp" -> Triple(Color(0xFF00E5FF), Color(0x3300E5FF), Icons.Default.Image)
+        else -> Triple(TextSecondary, Color(0x26FFFFFF), Icons.Default.Description)
     }
 
     Surface(
@@ -370,7 +372,7 @@ fun SplashScreenOverlay(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(ObsidianDark),
+                .background(Brush.verticalGradient(listOf(com.example.ui.theme.GlassPurpleDeep, com.example.ui.theme.GlassIndigo, com.example.ui.theme.GlassTealDeep))),
             contentAlignment = Alignment.Center
         ) {
             // Subtle cyber grid & animated neon green scan line
@@ -382,7 +384,7 @@ fun SplashScreenOverlay(
                     brush = Brush.horizontalGradient(
                         colors = listOf(
                             Color.Transparent,
-                            NeonGreen.copy(alpha = 0.65f),
+                            GlassCyan.copy(alpha = 0.65f),
                             Color.Transparent
                         )
                     ),
@@ -400,8 +402,8 @@ fun SplashScreenOverlay(
                 Surface(
                     modifier = Modifier.size(112.dp),
                     shape = RoundedCornerShape(28.dp),
-                    color = Color(0xFF15191D),
-                    border = BorderStroke(2.dp, NeonGreen)
+                    color = Color(0x26FFFFFF),
+                    border = BorderStroke(2.dp, Brush.linearGradient(listOf(GlassViolet, GlassCyan)))
                 ) {
                     Image(
                         painter = painterResource(id = R.drawable.img_launcher_icon_1793784567802),
@@ -440,7 +442,7 @@ fun SplashScreenOverlay(
                         .width(180.dp)
                         .height(4.dp)
                         .clip(RoundedCornerShape(2.dp))
-                        .background(Color(0xFF1F272E))
+                        .background(Color(0x33FFFFFF))
                 ) {
                     Box(
                         modifier = Modifier
