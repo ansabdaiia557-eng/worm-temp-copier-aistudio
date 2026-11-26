@@ -19,6 +19,6 @@ jobs:
       - name: List bucket before
         run: supabase --workdir app storage ls -r ss:///worm-content-files --linked --experimental || true
       - name: Delete everything in bucket
-        run: supabase --workdir app storage rm -r ss:///worm-content-files --linked --experimental || true
+        run: supabase --workdir app storage rm -r ss:///worm-content-files --linked --experimental --yes || true
       - name: List bucket after
         run: supabase --workdir app storage ls -r ss:///worm-content-files --linked --experimental || true
