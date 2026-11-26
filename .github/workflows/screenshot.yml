@@ -42,6 +42,8 @@ jobs:
             adb exec-out screencap -p > overlay.png
             adb shell uiautomator dump /sdcard/ui.xml || true
             adb pull /sdcard/ui.xml ui.xml || true
+            adb shell input tap 569 1604
+            sleep 4
             adb exec-out screencap -p > home.png
             adb logcat -d -s AndroidRuntime:E > crash.log || true
       - uses: actions/upload-artifact@v4
