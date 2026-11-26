@@ -59,7 +59,7 @@ object DeletionNotificationHelper {
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.img_launcher_icon_1793784567802)
-            .setContentTitle("Worm Temp Copier")
+            .setContentTitle("خربش")
             .setContentText("Temporary Copy Deleted: $fileName")
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
@@ -83,7 +83,7 @@ object DeletionNotificationHelper {
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.img_launcher_icon_1793784567802)
-            .setContentTitle("Worm Temp Copier - Deletion Failed")
+            .setContentTitle("خربش - Deletion Failed")
             .setContentText("Failed to delete $fileName: $reason")
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setPriority(NotificationCompat.PRIORITY_HIGH)

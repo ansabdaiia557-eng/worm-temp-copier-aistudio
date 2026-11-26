@@ -199,7 +199,7 @@ class ShizukuManager(private val context: Context) {
                         ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     if (launchIntent != null) {
                         context.startActivity(launchIntent)
-                        return "Opened Shizuku Manager. Start the service and return to Worm Temp Copier."
+                        return "Opened Shizuku Manager. Start the service and return to خربش."
                     }
                 } catch (_: Throwable) {
                 }

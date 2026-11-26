@@ -407,7 +407,7 @@ fun SplashScreenOverlay(
                 ) {
                     Image(
                         painter = painterResource(id = R.drawable.img_launcher_icon_1793784567802),
-                        contentDescription = "Worm Temp Copier Logo",
+                        contentDescription = "خربش Logo",
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
@@ -416,7 +416,7 @@ fun SplashScreenOverlay(
                 Spacer(modifier = Modifier.height(22.dp))
 
                 Text(
-                    text = "WORM TEMP COPIER",
+                    text = "خربش",
                     style = MaterialTheme.typography.headlineLarge,
                     color = TextPrimary,
                     fontWeight = FontWeight.Bold,

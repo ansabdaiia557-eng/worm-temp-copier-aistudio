@@ -274,7 +274,7 @@ data class AppStrings(
 
 val ArabicStrings = AppStrings(
     isArabic = true,
-    appName = "Worm Temp Copier",
+    appName = "خربش",
     appTagline = "أداة إدارة ونسخ الملفات المتقدمة",
     versionLabel = "الإصدار v1.3.0",
     navHome = "الرئيسية",
@@ -422,7 +422,7 @@ val ArabicStrings = AppStrings(
     btnResetSettings = "إعادة ضبط الإعدادات للوضع الافتراضي",
     resetSettingsConfirmMsg = "تمت إعادة ضبط جميع الإعدادات والمسار الافتراضي بنجاح.",
     // Telegram Gate
-    telegramGateTitle = "مرحباً بك في Worm Temp Copier",
+    telegramGateTitle = "مرحباً بك في خربش",
     telegramGateSubtitle = "قناة التحديثات والدعم الرسمي",
     telegramGateWelcomeMsg = "للحصول على أحدث ملفات التخصيص، حزم الإعدادات، والتحديثات الفنية المعتمدة أولاً بأول، انضم إلى قناتنا الرسمية على تيليجرام.",
     btnJoinTelegramChannel = "الانضمام إلى قناة التيليجرام",
@@ -527,7 +527,7 @@ val ArabicStrings = AppStrings(
 
 val EnglishStrings = AppStrings(
     isArabic = false,
-    appName = "Worm Temp Copier",
+    appName = "خربش",
     appTagline = "Tactical File & Shizuku Transfer Utility",
     versionLabel = "Version v1.3.0",
     navHome = "Home",
@@ -675,7 +675,7 @@ val EnglishStrings = AppStrings(
     btnResetSettings = "Reset Settings to Defaults",
     resetSettingsConfirmMsg = "All settings and default path preferences have been restored.",
     // Telegram Gate
-    telegramGateTitle = "Welcome to Worm Temp Copier",
+    telegramGateTitle = "Welcome to خربش",
     telegramGateSubtitle = "Official Updates & Support Channel",
     telegramGateWelcomeMsg = "To receive the latest verified customization packs, control profiles, and technical updates, join our official Telegram channel.",
     btnJoinTelegramChannel = "Join Telegram Channel",
