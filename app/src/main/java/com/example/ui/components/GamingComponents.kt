@@ -420,7 +420,6 @@ fun SplashScreenOverlay(
                     style = MaterialTheme.typography.headlineLarge,
                     color = TextPrimary,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp,
                     textAlign = TextAlign.Center
                 )
 
