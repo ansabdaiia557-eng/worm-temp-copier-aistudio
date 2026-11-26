@@ -52,7 +52,7 @@ android {
     debug {
       // Obfuscation only (no shrink/optimize) to make reverse engineering harder.
       isMinifyEnabled = true
-      proguardFiles(getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro")
+      proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       // Do not remove or modify this signingConfig assignment. It is necessary for Android apps in
       // AI Studio.
       signingConfig = signingConfigs.getByName("debugConfig")
