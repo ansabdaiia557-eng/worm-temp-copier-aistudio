@@ -1,0 +1,48 @@
+name: Home Screen Screenshot
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "APK build run id"
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  shot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: WormTempCopier-debug-apk
+          run-id: ${{ github.event.inputs.run_id }}
+          github-token: ${{ github.token }}
+          path: apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Emulator screenshot
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            adb install -r apk/*.apk
+            adb shell monkey -p com.aistudio.wormtempcopier.xkpqzr -c android.intent.category.LAUNCHER 1
+            sleep 20
+            adb exec-out screencap -p > home.png
+            adb logcat -d -s AndroidRuntime:E > crash.log || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: home-screenshot
+          path: |
+            home.png
+            crash.log
