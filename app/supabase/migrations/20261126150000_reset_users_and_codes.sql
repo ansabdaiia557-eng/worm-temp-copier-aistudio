@@ -21,7 +21,7 @@ BEGIN
     FROM pg_constraint c
     JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = c.conkey[1]
     WHERE c.contype='f' AND c.confrelid = 'auth.users'::regclass
-      AND c.confdeltype = 'a' AND c.conrelid::regclass::text LIKE 'public.%'
+      AND c.confdeltype = 'a' AND (SELECT relnamespace::regnamespace::text FROM pg_class WHERE oid=c.conrelid)='public'
       AND NOT a.attnotnull
   LOOP
     EXECUTE format('UPDATE %s SET %I = NULL WHERE %I = ANY($1)', r.tbl, r.col, r.col) USING victims;
